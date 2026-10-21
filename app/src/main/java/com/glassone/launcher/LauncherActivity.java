@@ -2,10 +2,8 @@ package com.glassone.launcher;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.role.RoleManager;
 import android.content.ComponentName;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
@@ -13,16 +11,14 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsetsController;
-import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -49,41 +45,38 @@ public class LauncherActivity extends Activity {
     private AppAdapter adapter;
     private EditText search;
     private LinearLayout dock;
-    private static final int HOME_ROLE_REQUEST = 1001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        configureWindow();
-        setContentView(buildUi());
-        loadApps();
-        promptForHomeRoleOnce();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (adapter != null) {
+        try {
+            configureWindow();
+            setContentView(buildUi());
             loadApps();
+        } catch (Throwable t) {
+            showSafeError(t);
         }
     }
 
     private void configureWindow() {
-        Window w = getWindow();
-        w.setStatusBarColor(Color.TRANSPARENT);
-        w.setNavigationBarColor(Color.TRANSPARENT);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            w.setDecorFitsSystemWindows(false);
-            WindowInsetsController c = w.getInsetsController();
-            if (c != null) {
-                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        try {
+            Window w = getWindow();
+            w.setStatusBarColor(Color.TRANSPARENT);
+            w.setNavigationBarColor(Color.TRANSPARENT);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                w.setDecorFitsSystemWindows(false);
+                WindowInsetsController c = w.getInsetsController();
+                if (c != null) {
+                    c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                }
             }
-        }
+        } catch (Throwable ignored) {}
     }
 
     private View buildUi() {
         FrameLayout root = new FrameLayout(this);
         root.setPadding(dp(14), dp(40), dp(14), dp(22));
+        root.setBackground(backgroundGradient());
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -102,9 +95,8 @@ public class LauncherActivity extends Activity {
 
         LinearLayout clockBox = new LinearLayout(this);
         clockBox.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams clockLp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        hero.addView(clockBox, clockLp);
+        hero.addView(clockBox, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         TextView clock = text(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()), 38, true);
         clockBox.addView(clock);
@@ -112,21 +104,19 @@ public class LauncherActivity extends Activity {
         date.setTextColor(0xDFFFFFFF);
         clockBox.addView(date);
 
-        LinearLayout heroActions = new LinearLayout(this);
-        heroActions.setOrientation(LinearLayout.HORIZONTAL);
-        heroActions.setGravity(Gravity.CENTER);
-        hero.addView(heroActions, new LinearLayout.LayoutParams(dp(118), dp(54)));
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.CENTER);
+        hero.addView(actions, new LinearLayout.LayoutParams(dp(118), dp(54)));
 
         TextView home = roundButton("⌂");
         LinearLayout.LayoutParams homeLp = new LinearLayout.LayoutParams(dp(54), dp(54));
         homeLp.rightMargin = dp(8);
-        heroActions.addView(home, homeLp);
-        home.setContentDescription("Imposta Glass One come Home");
-        home.setOnClickListener(v -> requestHomeRole());
+        actions.addView(home, homeLp);
+        home.setOnClickListener(v -> openHomeSettings());
 
         TextView control = roundButton("◫");
-        heroActions.addView(control, new LinearLayout.LayoutParams(dp(54), dp(54)));
-        control.setContentDescription("Apri Control Center");
+        actions.addView(control, new LinearLayout.LayoutParams(dp(54), dp(54)));
         control.setOnClickListener(v -> showControlCenter());
 
         search = new EditText(this);
@@ -152,9 +142,8 @@ public class LauncherActivity extends Activity {
         grid.setSelector(android.R.color.transparent);
         adapter = new AppAdapter();
         grid.setAdapter(adapter);
-        LinearLayout.LayoutParams gridLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        page.addView(grid, gridLp);
+        page.addView(grid, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         dock = new LinearLayout(this);
         dock.setOrientation(LinearLayout.HORIZONTAL);
@@ -181,106 +170,58 @@ public class LauncherActivity extends Activity {
         return root;
     }
 
-    private void promptForHomeRoleOnce() {
-        SharedPreferences p = getSharedPreferences("glass_one", MODE_PRIVATE);
-        if (p.getBoolean("home_prompted_v2", false)) return;
-        p.edit().putBoolean("home_prompted_v2", true).apply();
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!isHomeRoleHeld()) requestHomeRole();
-        }, 700);
-    }
-
-    private boolean isHomeRoleHeld() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            RoleManager rm = getSystemService(RoleManager.class);
-            return rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME) && rm.isRoleHeld(RoleManager.ROLE_HOME);
-        }
-        return false;
-    }
-
-    private void requestHomeRole() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                RoleManager rm = getSystemService(RoleManager.class);
-                if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME)) {
-                    if (rm.isRoleHeld(RoleManager.ROLE_HOME)) {
-                        Toast.makeText(this, "Glass One è già la Home predefinita", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_HOME), HOME_ROLE_REQUEST);
-                    return;
-                }
-            }
-            startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
-        } catch (Exception e) {
-            try {
-                startActivity(new Intent(Settings.ACTION_SETTINGS));
-            } catch (Exception ignored) {
-                Toast.makeText(this, "Apri Impostazioni > App > App predefinite > App Home", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == HOME_ROLE_REQUEST) {
-            if (resultCode == RESULT_OK || isHomeRoleHeld()) {
-                Toast.makeText(this, "Glass One impostato come Home", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "Puoi impostarlo più tardi con il pulsante ⌂", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
-
     private void loadApps() {
-        if (adapter == null || dock == null) return;
         PackageManager pm = getPackageManager();
-        Intent q = new Intent(Intent.ACTION_MAIN);
-        q.addCategory(Intent.CATEGORY_LAUNCHER);
+        Intent query = new Intent(Intent.ACTION_MAIN);
+        query.addCategory(Intent.CATEGORY_LAUNCHER);
 
         List<ResolveInfo> resolved;
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                resolved = pm.queryIntentActivities(q, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL));
-            } else {
-                resolved = pm.queryIntentActivities(q, PackageManager.MATCH_ALL);
-            }
-        } catch (Exception e) {
+            resolved = pm.queryIntentActivities(query, 0);
+        } catch (Throwable t) {
             resolved = new ArrayList<>();
         }
 
         allApps.clear();
         Set<String> seen = new HashSet<>();
         for (ResolveInfo r : resolved) {
-            if (r.activityInfo == null) continue;
-            String pkg = r.activityInfo.packageName;
-            String cls = r.activityInfo.name;
-            if (pkg == null || cls == null || pkg.equals(getPackageName())) continue;
-            String key = pkg + "/" + cls;
-            if (!seen.add(key)) continue;
-            CharSequence l = r.loadLabel(pm);
-            Drawable icon;
-            try { icon = r.loadIcon(pm); }
-            catch (Exception e) { icon = getDrawable(android.R.drawable.sym_def_app_icon); }
-            allApps.add(new AppItem(l == null ? pkg : l.toString(), pkg, cls, icon));
+            try {
+                if (r == null || r.activityInfo == null) continue;
+                String pkg = r.activityInfo.packageName;
+                String cls = r.activityInfo.name;
+                if (pkg == null || cls == null || pkg.equals(getPackageName())) continue;
+                if (!seen.add(pkg + "/" + cls)) continue;
+
+                CharSequence labelRaw = r.loadLabel(pm);
+                String label = labelRaw == null ? pkg : labelRaw.toString();
+                Drawable icon;
+                try {
+                    icon = r.loadIcon(pm);
+                } catch (Throwable iconError) {
+                    icon = getDrawable(android.R.drawable.sym_def_app_icon);
+                }
+                allApps.add(new AppItem(label, pkg, cls, icon));
+            } catch (Throwable ignored) {}
         }
 
         Collections.sort(allApps, Comparator.comparing(a -> a.label.toLowerCase(Locale.ROOT)));
-        filterApps(search == null ? "" : search.getText().toString());
+        filterApps("");
         buildDock();
 
         if (allApps.isEmpty()) {
-            Toast.makeText(this, "Nessuna app trovata. Riavvia Glass One oppure reinstallalo sopra la versione precedente.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Non riesco a leggere le app installate.", Toast.LENGTH_LONG).show();
         }
     }
 
     private void filterApps(String value) {
         String q = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         shownApps.clear();
-        if (q.isEmpty()) shownApps.addAll(allApps);
-        else for (AppItem a : allApps) {
-            if (a.label.toLowerCase(Locale.ROOT).contains(q)) shownApps.add(a);
+        if (q.isEmpty()) {
+            shownApps.addAll(allApps);
+        } else {
+            for (AppItem a : allApps) {
+                if (a.label.toLowerCase(Locale.ROOT).contains(q)) shownApps.add(a);
+            }
         }
         if (adapter != null) adapter.notifyDataSetChanged();
     }
@@ -297,8 +238,8 @@ public class LauncherActivity extends Activity {
                 "com.sec.android.app.camera"
         };
         List<AppItem> selected = new ArrayList<>();
-        for (String p : wanted) {
-            AppItem a = byPackage(p);
+        for (String pkg : wanted) {
+            AppItem a = byPackage(pkg);
             if (a != null && !selected.contains(a)) selected.add(a);
             if (selected.size() >= 4) break;
         }
@@ -306,6 +247,7 @@ public class LauncherActivity extends Activity {
             if (selected.size() >= 4) break;
             if (!selected.contains(a)) selected.add(a);
         }
+
         for (AppItem a : selected) {
             ImageView iv = new ImageView(this);
             iv.setImageDrawable(a.icon);
@@ -321,7 +263,9 @@ public class LauncherActivity extends Activity {
     }
 
     private AppItem byPackage(String pkg) {
-        for (AppItem a : allApps) if (a.pkg.equals(pkg)) return a;
+        for (AppItem a : allApps) {
+            if (a.pkg.equals(pkg)) return a;
+        }
         return null;
     }
 
@@ -332,35 +276,41 @@ public class LauncherActivity extends Activity {
             i.setComponent(new ComponentName(a.pkg, a.cls));
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(i);
-        } catch (Exception first) {
+        } catch (Throwable e) {
+            Toast.makeText(this, "Impossibile aprire " + a.label, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openHomeSettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
+        } catch (Throwable e) {
             try {
-                Intent i = getPackageManager().getLaunchIntentForPackage(a.pkg);
-                if (i != null) {
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(i);
-                } else {
-                    Toast.makeText(this, "Impossibile aprire " + a.label, Toast.LENGTH_SHORT).show();
-                }
-            } catch (Exception ignored) {
-                Toast.makeText(this, "Impossibile aprire " + a.label, Toast.LENGTH_SHORT).show();
+                startActivity(new Intent(Settings.ACTION_SETTINGS));
+            } catch (Throwable ignored) {
+                Toast.makeText(this, "Vai in Impostazioni > App > App predefinite > App Home", Toast.LENGTH_LONG).show();
             }
         }
     }
 
     private void showControlCenter() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(10), dp(10), dp(10), dp(10));
-        box.addView(actionButton("Wi‑Fi", Settings.ACTION_WIFI_SETTINGS));
-        box.addView(actionButton("Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS));
-        box.addView(actionButton("Sfondo", Intent.ACTION_SET_WALLPAPER));
-        box.addView(actionButton("App Home", Settings.ACTION_HOME_SETTINGS));
-        box.addView(actionButton("Impostazioni", Settings.ACTION_SETTINGS));
-        new AlertDialog.Builder(this)
-                .setTitle("Glass Control Center")
-                .setView(box)
-                .setNegativeButton("Chiudi", null)
-                .show();
+        try {
+            LinearLayout box = new LinearLayout(this);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setPadding(dp(10), dp(10), dp(10), dp(10));
+            box.addView(actionButton("Wi‑Fi", Settings.ACTION_WIFI_SETTINGS));
+            box.addView(actionButton("Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS));
+            box.addView(actionButton("Sfondo", Intent.ACTION_SET_WALLPAPER));
+            box.addView(actionButton("App Home", Settings.ACTION_HOME_SETTINGS));
+            box.addView(actionButton("Impostazioni", Settings.ACTION_SETTINGS));
+            new AlertDialog.Builder(this)
+                    .setTitle("Glass Control Center")
+                    .setView(box)
+                    .setNegativeButton("Chiudi", null)
+                    .show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "Control Center non disponibile", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private TextView actionButton(String label, String action) {
@@ -373,9 +323,10 @@ public class LauncherActivity extends Activity {
         lp.bottomMargin = dp(8);
         v.setLayoutParams(lp);
         v.setOnClickListener(x -> {
-            try { startActivity(new Intent(action)); }
-            catch (Exception ignored) {
-                Toast.makeText(this, "Funzione non disponibile su questo dispositivo", Toast.LENGTH_SHORT).show();
+            try {
+                startActivity(new Intent(action));
+            } catch (Throwable ignored) {
+                Toast.makeText(this, "Funzione non disponibile", Toast.LENGTH_SHORT).show();
             }
         });
         return v;
@@ -384,8 +335,8 @@ public class LauncherActivity extends Activity {
     private void showLauncherOptions() {
         new AlertDialog.Builder(this)
                 .setTitle("Glass One")
-                .setMessage("Imposta Glass One come schermata Home predefinita per usarlo come launcher.")
-                .setPositiveButton("Imposta Home", (d, w) -> requestHomeRole())
+                .setMessage("Per usarlo come launcher, impostalo come App Home predefinita.")
+                .setPositiveButton("Imposta Home", (d, w) -> openHomeSettings())
                 .setNeutralButton("Control Center", (d, w) -> showControlCenter())
                 .setNegativeButton("Annulla", null)
                 .show();
@@ -403,7 +354,8 @@ public class LauncherActivity extends Activity {
         v.setText(s);
         v.setTextColor(Color.WHITE);
         v.setTextSize(sp);
-        v.setTypeface(android.graphics.Typeface.create("sans", bold ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL));
+        v.setTypeface(android.graphics.Typeface.create("sans",
+                bold ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL));
         return v;
     }
 
@@ -413,6 +365,27 @@ public class LauncherActivity extends Activity {
         g.setCornerRadius(dp(radiusDp));
         g.setStroke(dp(1), 0x66FFFFFF);
         return g;
+    }
+
+    private GradientDrawable backgroundGradient() {
+        GradientDrawable g = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFF10141C, 0xFF17243B, 0xFF281D45});
+        return g;
+    }
+
+    private void showSafeError(Throwable t) {
+        try {
+            TextView error = new TextView(this);
+            error.setText("Glass One non è riuscito ad avviarsi.\n\nPremi qui per aprire le impostazioni Home.");
+            error.setTextColor(Color.WHITE);
+            error.setTextSize(18f);
+            error.setGravity(Gravity.CENTER);
+            error.setPadding(dp(30), dp(30), dp(30), dp(30));
+            error.setBackgroundColor(0xFF10141C);
+            error.setOnClickListener(v -> openHomeSettings());
+            setContentView(error);
+        } catch (Throwable ignored) {}
     }
 
     private String cap(String s) {
@@ -429,6 +402,7 @@ public class LauncherActivity extends Activity {
         final String pkg;
         final String cls;
         final Drawable icon;
+
         AppItem(String label, String pkg, String cls, Drawable icon) {
             this.label = label;
             this.pkg = pkg;
@@ -447,16 +421,19 @@ public class LauncherActivity extends Activity {
             LinearLayout cell;
             ImageView icon;
             TextView label;
+
             if (convertView == null) {
                 cell = new LinearLayout(LauncherActivity.this);
                 cell.setOrientation(LinearLayout.VERTICAL);
                 cell.setGravity(Gravity.CENTER);
                 cell.setPadding(dp(3), dp(4), dp(3), dp(4));
+
                 icon = new ImageView(LauncherActivity.this);
                 icon.setId(android.R.id.icon);
                 icon.setPadding(dp(7), dp(7), dp(7), dp(7));
                 icon.setBackground(glass(0x493E4A58, 20));
                 cell.addView(icon, new LinearLayout.LayoutParams(dp(62), dp(62)));
+
                 label = text("", 11, true);
                 label.setId(android.R.id.text1);
                 label.setGravity(Gravity.CENTER);
@@ -470,6 +447,7 @@ public class LauncherActivity extends Activity {
                 icon = cell.findViewById(android.R.id.icon);
                 label = cell.findViewById(android.R.id.text1);
             }
+
             AppItem a = shownApps.get(position);
             icon.setImageDrawable(a.icon);
             label.setText(a.label);
