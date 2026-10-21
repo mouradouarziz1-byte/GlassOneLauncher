@@ -1,0 +1,31 @@
+name: Build PLCDataAnalyzer
+on:
+  push:
+    branches: [ plc-data-analyzer ]
+    paths:
+      - 'PLCDataAnalyzer/**'
+      - '.github/workflows/build-plc-data-analyzer.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build .NET Framework 4.8
+        shell: pwsh
+        run: dotnet build PLCDataAnalyzer/PLCDataAnalyzer.csproj -c Release
+      - name: Package Windows executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          Copy-Item PLCDataAnalyzer/bin/Release/net48/PLCDataAnalyzer.exe artifact/
+          Copy-Item PLCDataAnalyzer/bin/Release/net48/PLCDataAnalyzer.exe.config artifact/ -ErrorAction SilentlyContinue
+          Copy-Item PLCDataAnalyzer/README.md artifact/
+          Compress-Archive -Path artifact/* -DestinationPath PLCDataAnalyzer-Windows11.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PLCDataAnalyzer-Windows11
+          path: |
+            artifact/*
+            PLCDataAnalyzer-Windows11.zip
