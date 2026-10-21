@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build .NET Framework 4.8
+      - name: Build .NET Framework 4.8 x64
         shell: pwsh
         run: dotnet build PLCDataAnalyzer/PLCDataAnalyzer.csproj -c Release
       - name: Package Windows executable
@@ -22,10 +22,11 @@ jobs:
           Copy-Item PLCDataAnalyzer/bin/Release/net48/PLCDataAnalyzer.exe artifact/
           Copy-Item PLCDataAnalyzer/bin/Release/net48/PLCDataAnalyzer.exe.config artifact/ -ErrorAction SilentlyContinue
           Copy-Item PLCDataAnalyzer/README.md artifact/
-          Compress-Archive -Path artifact/* -DestinationPath PLCDataAnalyzer-Windows11.zip -Force
+          Copy-Item PLCDataAnalyzer/Diagnostica-PLCDataAnalyzer.cmd artifact/
+          Compress-Archive -Path artifact/* -DestinationPath PLCDataAnalyzer-v0.2-Windows11.zip -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: PLCDataAnalyzer-Windows11
+          name: PLCDataAnalyzer-v0.2-Windows11
           path: |
             artifact/*
-            PLCDataAnalyzer-Windows11.zip
+            PLCDataAnalyzer-v0.2-Windows11.zip
