@@ -185,8 +185,13 @@ namespace PLCDataAnalyzer
             object project = null;
             try
             {
-                log("Apro progetto: " + file);
-                project = Call(Prop(portal, "Projects"), "Open", new FileInfo(Path.GetFullPath(file)));
+                log("Apro progetto in sola lettura (Secondary): " + file);
+                var projects = Prop(portal, "Projects");
+                var modeType = FindType("ProjectOpenMode", log);
+                if (modeType == null || !modeType.IsEnum) throw new TypeLoadException("ProjectOpenMode non trovato nelle DLL TIA V21.");
+                var secondary = Enum.Parse(modeType, "Secondary");
+                project = Call(projects, "Open", new FileInfo(Path.GetFullPath(file)), null, secondary);
+                log("Progetto aperto in sola lettura.");
                 return Scan(project, log);
             }
             finally { Close(project); }
