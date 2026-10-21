@@ -1,8 +1,8 @@
-name: Build Radio Maroc APK
+name: Build Radio Maroc v2 APK
 
 on:
   push:
-    branches: [ "radio-maroc-apk" ]
+    branches: [ "radio-maroc-v2" ]
     paths:
       - "RadioMarocApp/**"
       - ".github/workflows/radio-maroc-build.yml"
@@ -24,18 +24,18 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '9.6.0'
 
       - name: Build debug APK
         working-directory: RadioMarocApp
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp RadioMarocApp/app/build/outputs/apk/debug/app-debug.apk RadioMaroc-v1.0-debug.apk
+        run: cp RadioMarocApp/app/build/outputs/apk/debug/app-debug.apk RadioMaroc-v2.0-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RadioMaroc-APK
-          path: RadioMaroc-v1.0-debug.apk
+          name: RadioMaroc-v2-APK
+          path: RadioMaroc-v2.0-debug.apk
           if-no-files-found: error

@@ -1,0 +1,3 @@
+package com.mourad.radiomaroc;
+import android.content.BroadcastReceiver;import android.content.Context;import android.content.Intent;import android.os.Build;
+public class AlarmReceiver extends BroadcastReceiver { @Override public void onReceive(Context c,Intent i){Prefs p=new Prefs(c);String id=i!=null?i.getStringExtra(RadioService.EXTRA_STATION_ID):null;if(id==null||StationRepository.find(id)==null)id=p.alarmStationId();Intent s=new Intent(c,RadioService.class);s.setAction(RadioService.ACTION_PLAY_STATION);s.putExtra(RadioService.EXTRA_STATION_ID,id);if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)c.startForegroundService(s);else c.startService(s);if(p.isAlarmEnabled())AlarmScheduler.scheduleNext(c,p.alarmStationId(),p.alarmHour(),p.alarmMinute());}}
