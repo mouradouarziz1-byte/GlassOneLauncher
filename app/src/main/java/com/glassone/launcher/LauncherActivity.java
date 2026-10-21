@@ -6,13 +6,22 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.Editable;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
@@ -42,9 +51,20 @@ public class LauncherActivity extends Activity {
 
     private final List<AppItem> allApps = new ArrayList<>();
     private final List<AppItem> shownApps = new ArrayList<>();
+    private final Handler clockHandler = new Handler(Looper.getMainLooper());
+
     private AppAdapter adapter;
     private EditText search;
     private LinearLayout dock;
+    private TextView clockText;
+    private TextView dateText;
+
+    private final Runnable clockTicker = new Runnable() {
+        @Override public void run() {
+            updateClock();
+            clockHandler.postDelayed(this, 30000);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,9 +73,16 @@ public class LauncherActivity extends Activity {
             configureWindow();
             setContentView(buildUi());
             loadApps();
+            clockHandler.post(clockTicker);
         } catch (Throwable t) {
             showSafeError(t);
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        clockHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 
     private void configureWindow() {
@@ -75,85 +102,139 @@ public class LauncherActivity extends Activity {
 
     private View buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setPadding(dp(14), dp(40), dp(14), dp(22));
-        root.setBackground(backgroundGradient());
+        root.addView(new AuroraBackgroundView(this), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setPadding(dp(6), 0, dp(6), 0);
+        page.setPadding(dp(18), dp(52), dp(18), dp(18));
         root.addView(page, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
-        LinearLayout hero = new LinearLayout(this);
-        hero.setOrientation(LinearLayout.HORIZONTAL);
-        hero.setGravity(Gravity.CENTER_VERTICAL);
-        hero.setPadding(dp(18), dp(14), dp(12), dp(14));
-        hero.setBackground(glass(0xB8323C4A, 30));
-        page.addView(hero, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(104)));
+        // Top area: large floating glass clock + round Control Center button.
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+        page.addView(topRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(128)));
 
-        LinearLayout clockBox = new LinearLayout(this);
-        clockBox.setOrientation(LinearLayout.VERTICAL);
-        hero.addView(clockBox, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout clockCard = new LinearLayout(this);
+        clockCard.setOrientation(LinearLayout.VERTICAL);
+        clockCard.setGravity(Gravity.CENTER_VERTICAL);
+        clockCard.setPadding(dp(22), dp(14), dp(18), dp(14));
+        clockCard.setBackground(glassPanel(86, 34, 30));
+        clockCard.setElevation(dp(10));
+        LinearLayout.LayoutParams clockCardLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        clockCardLp.rightMargin = dp(12);
+        topRow.addView(clockCard, clockCardLp);
 
-        TextView clock = text(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date()), 38, true);
-        clockBox.addView(clock);
-        TextView date = text(cap(new SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(new Date())), 14, false);
-        date.setTextColor(0xDFFFFFFF);
-        clockBox.addView(date);
+        TextView brand = text("GLASS ONE", 11, true);
+        brand.setTextColor(0xD9FFFFFF);
+        brand.setLetterSpacing(0.16f);
+        clockCard.addView(brand);
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER);
-        hero.addView(actions, new LinearLayout.LayoutParams(dp(118), dp(54)));
+        clockText = text("", 45, true);
+        clockText.setLetterSpacing(-0.03f);
+        LinearLayout.LayoutParams clockLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clockLp.topMargin = dp(2);
+        clockCard.addView(clockText, clockLp);
 
-        TextView home = roundButton("⌂");
-        LinearLayout.LayoutParams homeLp = new LinearLayout.LayoutParams(dp(54), dp(54));
-        homeLp.rightMargin = dp(8);
-        actions.addView(home, homeLp);
-        home.setOnClickListener(v -> openHomeSettings());
+        dateText = text("", 15, false);
+        dateText.setTextColor(0xDEFFFFFF);
+        clockCard.addView(dateText);
+        updateClock();
 
-        TextView control = roundButton("◫");
-        actions.addView(control, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        TextView control = text("••\n••", 18, true);
+        control.setGravity(Gravity.CENTER);
+        control.setLineSpacing(-dp(5), 0.75f);
+        control.setBackground(glassPanel(105, 42, 40));
+        control.setElevation(dp(12));
+        control.setContentDescription("Glass Control Center");
+        topRow.addView(control, new LinearLayout.LayoutParams(dp(72), dp(72)));
         control.setOnClickListener(v -> showControlCenter());
+        control.setOnLongClickListener(v -> {
+            openHomeSettings();
+            return true;
+        });
+
+        // Floating glass search bar.
+        LinearLayout searchBar = new LinearLayout(this);
+        searchBar.setOrientation(LinearLayout.HORIZONTAL);
+        searchBar.setGravity(Gravity.CENTER_VERTICAL);
+        searchBar.setPadding(dp(16), 0, dp(12), 0);
+        searchBar.setBackground(glassPanel(78, 26, 30));
+        searchBar.setElevation(dp(8));
+        LinearLayout.LayoutParams searchBarLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(58));
+        searchBarLp.topMargin = dp(12);
+        page.addView(searchBar, searchBarLp);
+
+        TextView magnifier = text("⌕", 27, false);
+        magnifier.setGravity(Gravity.CENTER);
+        magnifier.setTextColor(0xEEFFFFFF);
+        searchBar.addView(magnifier, new LinearLayout.LayoutParams(dp(36), dp(50)));
 
         search = new EditText(this);
         search.setSingleLine(true);
         search.setHint("Cerca app");
         search.setTextColor(Color.WHITE);
-        search.setHintTextColor(0xAFFFFFFF);
+        search.setHintTextColor(0xBFFFFFFF);
         search.setTextSize(16f);
-        search.setPadding(dp(20), 0, dp(20), 0);
-        search.setBackground(glass(0xA82B3542, 28));
-        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(56));
-        searchLp.topMargin = dp(12);
-        page.addView(search, searchLp);
+        search.setPadding(dp(6), 0, dp(6), 0);
+        search.setBackgroundColor(Color.TRANSPARENT);
+        searchBar.addView(search, new LinearLayout.LayoutParams(0, dp(54), 1f));
 
+        TextView mic = text("●", 13, false);
+        mic.setGravity(Gravity.CENTER);
+        mic.setTextColor(0xD9FFFFFF);
+        searchBar.addView(mic, new LinearLayout.LayoutParams(dp(34), dp(50)));
+
+        // App grid.
         GridView grid = new GridView(this);
         grid.setNumColumns(4);
-        grid.setVerticalSpacing(dp(10));
+        grid.setVerticalSpacing(dp(6));
         grid.setHorizontalSpacing(dp(4));
         grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
         grid.setClipToPadding(false);
-        grid.setPadding(0, dp(12), 0, dp(12));
+        grid.setPadding(0, dp(14), 0, dp(5));
         grid.setSelector(android.R.color.transparent);
+        grid.setVerticalScrollBarEnabled(false);
         adapter = new AppAdapter();
         grid.setAdapter(adapter);
         page.addView(grid, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        // Tiny iOS-like page indicator.
+        LinearLayout dots = new LinearLayout(this);
+        dots.setGravity(Gravity.CENTER);
+        dots.setOrientation(LinearLayout.HORIZONTAL);
+        page.addView(dots, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(18)));
+        for (int i = 0; i < 3; i++) {
+            View dot = new View(this);
+            GradientDrawable dg = new GradientDrawable();
+            dg.setShape(GradientDrawable.OVAL);
+            dg.setColor(i == 0 ? 0xEFFFFFFF : 0x66FFFFFF);
+            dot.setBackground(dg);
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(dp(6), dp(6));
+            dlp.leftMargin = dp(4);
+            dlp.rightMargin = dp(4);
+            dots.addView(dot, dlp);
+        }
+
+        // Large floating translucent dock.
         dock = new LinearLayout(this);
         dock.setOrientation(LinearLayout.HORIZONTAL);
         dock.setGravity(Gravity.CENTER);
-        dock.setPadding(dp(8), dp(8), dp(8), dp(8));
-        dock.setBackground(glass(0xBC313B48, 34));
-        LinearLayout.LayoutParams dockLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(86));
-        dockLp.topMargin = dp(8);
-        page.addView(dock, dockLp);
+        dock.setPadding(dp(9), dp(8), dp(9), dp(7));
+        dock.setBackground(glassPanel(96, 36, 34));
+        dock.setElevation(dp(14));
+        page.addView(dock, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(94)));
 
         search.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
@@ -168,6 +249,19 @@ public class LauncherActivity extends Activity {
             return true;
         });
         return root;
+    }
+
+    private void updateClock() {
+        try {
+            Date now = new Date();
+            if (clockText != null) {
+                clockText.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
+            }
+            if (dateText != null) {
+                String d = new SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(now);
+                dateText.setText(cap(d));
+            }
+        } catch (Throwable ignored) {}
     }
 
     private void loadApps() {
@@ -237,6 +331,7 @@ public class LauncherActivity extends Activity {
                 "com.android.chrome",
                 "com.sec.android.app.camera"
         };
+
         List<AppItem> selected = new ArrayList<>();
         for (String pkg : wanted) {
             AppItem a = byPackage(pkg);
@@ -249,17 +344,38 @@ public class LauncherActivity extends Activity {
         }
 
         for (AppItem a : selected) {
+            LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setGravity(Gravity.CENTER);
+            item.setPadding(dp(2), 0, dp(2), 0);
+            dock.addView(item, new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
             ImageView iv = new ImageView(this);
             iv.setImageDrawable(a.icon);
-            iv.setPadding(dp(10), dp(10), dp(10), dp(10));
-            iv.setBackground(glass(0x603E4A58, 22));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(64), 1f);
-            lp.leftMargin = dp(5);
-            lp.rightMargin = dp(5);
-            dock.addView(iv, lp);
-            iv.setContentDescription(a.label);
-            iv.setOnClickListener(v -> launch(a));
+            iv.setPadding(dp(6), dp(6), dp(6), dp(6));
+            iv.setBackground(glassPanel(62, 20, 22));
+            item.addView(iv, new LinearLayout.LayoutParams(dp(58), dp(58)));
+
+            TextView label = text(shortDockLabel(a.label), 10, false);
+            label.setGravity(Gravity.CENTER);
+            label.setSingleLine(true);
+            label.setEllipsize(TextUtils.TruncateAt.END);
+            label.setTextColor(0xEEFFFFFF);
+            LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(20));
+            item.addView(label, llp);
+
+            item.setContentDescription(a.label);
+            item.setOnClickListener(v -> launch(a));
         }
+    }
+
+    private String shortDockLabel(String s) {
+        if (s == null) return "";
+        String v = s.trim();
+        if (v.length() <= 11) return v;
+        return v.substring(0, 10) + "…";
     }
 
     private AppItem byPackage(String pkg) {
@@ -288,7 +404,9 @@ public class LauncherActivity extends Activity {
             try {
                 startActivity(new Intent(Settings.ACTION_SETTINGS));
             } catch (Throwable ignored) {
-                Toast.makeText(this, "Vai in Impostazioni > App > App predefinite > App Home", Toast.LENGTH_LONG).show();
+                Toast.makeText(this,
+                        "Vai in Impostazioni > App > App predefinite > App Home",
+                        Toast.LENGTH_LONG).show();
             }
         }
     }
@@ -297,30 +415,40 @@ public class LauncherActivity extends Activity {
         try {
             LinearLayout box = new LinearLayout(this);
             box.setOrientation(LinearLayout.VERTICAL);
-            box.setPadding(dp(10), dp(10), dp(10), dp(10));
+            box.setPadding(dp(18), dp(14), dp(18), dp(10));
+            box.setBackground(glassPanel(135, 54, 30));
+
+            TextView title = text("Glass Control Center", 21, true);
+            title.setPadding(dp(4), dp(4), dp(4), dp(14));
+            box.addView(title);
             box.addView(actionButton("Wi‑Fi", Settings.ACTION_WIFI_SETTINGS));
             box.addView(actionButton("Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS));
             box.addView(actionButton("Sfondo", Intent.ACTION_SET_WALLPAPER));
-            box.addView(actionButton("App Home", Settings.ACTION_HOME_SETTINGS));
+            box.addView(actionButton("Imposta Glass One come Home", Settings.ACTION_HOME_SETTINGS));
             box.addView(actionButton("Impostazioni", Settings.ACTION_SETTINGS));
-            new AlertDialog.Builder(this)
-                    .setTitle("Glass Control Center")
+
+            AlertDialog dialog = new AlertDialog.Builder(this)
                     .setView(box)
                     .setNegativeButton("Chiudi", null)
-                    .show();
+                    .create();
+            dialog.setOnShowListener(d -> {
+                Window w = dialog.getWindow();
+                if (w != null) w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            });
+            dialog.show();
         } catch (Throwable t) {
             Toast.makeText(this, "Control Center non disponibile", Toast.LENGTH_SHORT).show();
         }
     }
 
     private TextView actionButton(String label, String action) {
-        TextView v = text(label, 17, true);
+        TextView v = text(label, 16, true);
         v.setGravity(Gravity.CENTER_VERTICAL);
         v.setPadding(dp(18), 0, dp(18), 0);
-        v.setBackground(glass(0x553E4A58, 22));
+        v.setBackground(glassPanel(58, 20, 22));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(58));
-        lp.bottomMargin = dp(8);
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(56));
+        lp.bottomMargin = dp(9);
         v.setLayoutParams(lp);
         v.setOnClickListener(x -> {
             try {
@@ -335,18 +463,11 @@ public class LauncherActivity extends Activity {
     private void showLauncherOptions() {
         new AlertDialog.Builder(this)
                 .setTitle("Glass One")
-                .setMessage("Per usarlo come launcher, impostalo come App Home predefinita.")
+                .setMessage("Premi Imposta Home per usare Glass One come launcher predefinito. Tieni premuto il pulsante tondo in alto per riaprire rapidamente questa impostazione.")
                 .setPositiveButton("Imposta Home", (d, w) -> openHomeSettings())
                 .setNeutralButton("Control Center", (d, w) -> showControlCenter())
                 .setNegativeButton("Annulla", null)
                 .show();
-    }
-
-    private TextView roundButton(String s) {
-        TextView v = text(s, 27, false);
-        v.setGravity(Gravity.CENTER);
-        v.setBackground(glass(0x663E4A58, 27));
-        return v;
     }
 
     private TextView text(String s, float sp, boolean bold) {
@@ -359,30 +480,27 @@ public class LauncherActivity extends Activity {
         return v;
     }
 
-    private GradientDrawable glass(int color, int radiusDp) {
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(color);
-        g.setCornerRadius(dp(radiusDp));
-        g.setStroke(dp(1), 0x66FFFFFF);
-        return g;
-    }
-
-    private GradientDrawable backgroundGradient() {
+    private GradientDrawable glassPanel(int alphaTop, int alphaBottom, int radiusDp) {
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF10141C, 0xFF17243B, 0xFF281D45});
+                new int[]{
+                        Color.argb(alphaTop, 255, 255, 255),
+                        Color.argb(alphaBottom, 255, 255, 255)
+                });
+        g.setCornerRadius(dp(radiusDp));
+        g.setStroke(Math.max(1, dp(1)), 0x70FFFFFF);
         return g;
     }
 
     private void showSafeError(Throwable t) {
         try {
             TextView error = new TextView(this);
-            error.setText("Glass One non è riuscito ad avviarsi.\n\nPremi qui per aprire le impostazioni Home.");
+            error.setText("Glass One non è riuscito ad avviarsi.\n\nTocca qui per aprire le impostazioni Home.");
             error.setTextColor(Color.WHITE);
             error.setTextSize(18f);
             error.setGravity(Gravity.CENTER);
             error.setPadding(dp(30), dp(30), dp(30), dp(30));
-            error.setBackgroundColor(0xFF10141C);
+            error.setBackgroundColor(0xFF0B1230);
             error.setOnClickListener(v -> openHomeSettings());
             setContentView(error);
         } catch (Throwable ignored) {}
@@ -426,20 +544,22 @@ public class LauncherActivity extends Activity {
                 cell = new LinearLayout(LauncherActivity.this);
                 cell.setOrientation(LinearLayout.VERTICAL);
                 cell.setGravity(Gravity.CENTER);
-                cell.setPadding(dp(3), dp(4), dp(3), dp(4));
+                cell.setPadding(dp(2), dp(4), dp(2), dp(2));
 
                 icon = new ImageView(LauncherActivity.this);
                 icon.setId(android.R.id.icon);
-                icon.setPadding(dp(7), dp(7), dp(7), dp(7));
-                icon.setBackground(glass(0x493E4A58, 20));
-                cell.addView(icon, new LinearLayout.LayoutParams(dp(62), dp(62)));
+                icon.setPadding(dp(6), dp(6), dp(6), dp(6));
+                icon.setBackground(glassPanel(52, 15, 21));
+                cell.addView(icon, new LinearLayout.LayoutParams(dp(66), dp(66)));
 
-                label = text("", 11, true);
+                label = text("", 11, false);
                 label.setId(android.R.id.text1);
                 label.setGravity(Gravity.CENTER);
-                label.setMaxLines(1);
+                label.setSingleLine(true);
+                label.setEllipsize(TextUtils.TruncateAt.END);
+                label.setTextColor(0xECFFFFFF);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, dp(25));
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(26));
                 lp.topMargin = dp(3);
                 cell.addView(label, lp);
             } else {
@@ -451,8 +571,63 @@ public class LauncherActivity extends Activity {
             AppItem a = shownApps.get(position);
             icon.setImageDrawable(a.icon);
             label.setText(a.label);
+            cell.setContentDescription(a.label);
             cell.setOnClickListener(v -> launch(a));
             return cell;
+        }
+    }
+
+    private static final class AuroraBackgroundView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        AuroraBackgroundView(android.content.Context context) {
+            super(context);
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float w = getWidth();
+            float h = getHeight();
+            if (w <= 0 || h <= 0) return;
+
+            paint.setShader(new LinearGradient(
+                    0, 0, w, h,
+                    new int[]{0xFF081126, 0xFF123A73, 0xFF3A1F69, 0xFF11172E},
+                    new float[]{0f, 0.38f, 0.72f, 1f},
+                    Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, w, h, paint);
+
+            drawGlow(canvas, w * 0.18f, h * 0.16f, w * 0.72f,
+                    0xA24AA8FF, 0x004AA8FF);
+            drawGlow(canvas, w * 0.88f, h * 0.31f, w * 0.66f,
+                    0x8D9A56FF, 0x009A56FF);
+            drawGlow(canvas, w * 0.50f, h * 0.78f, w * 0.78f,
+                    0x66702CFF, 0x00702CFF);
+            drawGlow(canvas, w * 0.10f, h * 0.92f, w * 0.48f,
+                    0x4D1EB4FF, 0x001EB4FF);
+
+            paint.setShader(new LinearGradient(
+                    0, 0, w, 0,
+                    new int[]{0x22FFFFFF, 0x00FFFFFF, 0x16FFFFFF},
+                    null,
+                    Shader.TileMode.CLAMP));
+            canvas.save();
+            canvas.rotate(-28f, w * 0.45f, h * 0.35f);
+            canvas.drawRoundRect(-w * 0.25f, h * 0.20f, w * 1.25f, h * 0.31f,
+                    h * 0.05f, h * 0.05f, paint);
+            canvas.restore();
+        }
+
+        private void drawGlow(Canvas canvas, float cx, float cy, float radius,
+                              int inner, int outer) {
+            paint.setShader(new RadialGradient(
+                    cx, cy, radius,
+                    new int[]{inner, outer},
+                    new float[]{0f, 1f},
+                    Shader.TileMode.CLAMP));
+            canvas.drawCircle(cx, cy, radius, paint);
         }
     }
 }
