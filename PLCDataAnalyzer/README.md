@@ -1,26 +1,24 @@
-# PLC Data Analyzer v0.1
+# PLC Data Analyzer v0.2
 
-Prima build Windows 11 di un data browser Siemens basato su TIA Portal Openness V21.
+Build Windows 11 x64 per TIA Portal Openness V21.
 
-## Funzioni incluse
-- rilevamento automatico TIA Portal Openness V21
-- apertura di un progetto `.ap21`
-- Station Upload di una CPU tramite `StationUploadProvider`
-- scelta IP e interfaccia PN/IE
-- importazione PLC Tag Tables
-- enumerazione Data Block e UDT
-- tentativo di export SimaticML per ricavare i membri simbolici di DB/UDT
-- ricerca rapida delle variabili
-- esportazione catalogo in CSV
+## Correzioni v0.2
+- eseguibile forzato x64
+- ricerca esplicita del registro Windows 64 bit di TIA Openness V21
+- diagnostica del gruppo Windows `Siemens TIA Openness`
+- log persistente in `%LOCALAPPDATA%\PLCDataAnalyzer\PLCDataAnalyzer.log`
+- gestione del callback di Station Upload
+- campo password PLC opzionale per accesso in lettura
+- scelta interfaccia PN/IE più robusta con ricerca Accessible Devices
+- estrazione dei membri dei DB tramite export SimaticML quando disponibile
 
-## Requisiti sul PC
+## Requisiti
 - Windows 11 x64
-- TIA Portal V21 con STEP 7 e TIA Portal Openness
+- TIA Portal V21 + STEP 7
 - .NET Framework 4.8
-- accesso di rete al PLC
-- autorizzazioni necessarie sul PLC/TIA Portal
+- utente Windows membro del gruppo locale `Siemens TIA Openness`
+- accesso Ethernet al PLC
 
-Al primo utilizzo Openness può richiedere l'approvazione dell'applicazione nella AllowList/Firewall di TIA Portal.
+Al primo collegamento TIA Portal può mostrare il firewall Openness: autorizzare `PLCDataAnalyzer.exe` con **Sì** o **Sì per tutte**.
 
-## Stato
-Questa è la v0.1: il modulo di browsing/importazione è già presente. L'acquisizione ciclica e i trend realtime saranno aggiunti in una build successiva.
+Se qualcosa non funziona, premi **Apri log** nell'app oppure esegui `Diagnostica-PLCDataAnalyzer.cmd`.
