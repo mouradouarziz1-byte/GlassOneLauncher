@@ -2,14 +2,19 @@ package com.glassone.launcher;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.role.RoleManager;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -25,6 +30,7 @@ import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -43,6 +49,7 @@ public class LauncherActivity extends Activity {
     private AppAdapter adapter;
     private EditText search;
     private LinearLayout dock;
+    private static final int HOME_ROLE_REQUEST = 1001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,16 +57,27 @@ public class LauncherActivity extends Activity {
         configureWindow();
         setContentView(buildUi());
         loadApps();
+        promptForHomeRoleOnce();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (adapter != null) {
+            loadApps();
+        }
     }
 
     private void configureWindow() {
         Window w = getWindow();
         w.setStatusBarColor(Color.TRANSPARENT);
         w.setNavigationBarColor(Color.TRANSPARENT);
-        w.setDecorFitsSystemWindows(false);
-        WindowInsetsController c = w.getInsetsController();
-        if (c != null) {
-            c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            w.setDecorFitsSystemWindows(false);
+            WindowInsetsController c = w.getInsetsController();
+            if (c != null) {
+                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
         }
     }
 
@@ -94,8 +112,21 @@ public class LauncherActivity extends Activity {
         date.setTextColor(0xDFFFFFFF);
         clockBox.addView(date);
 
+        LinearLayout heroActions = new LinearLayout(this);
+        heroActions.setOrientation(LinearLayout.HORIZONTAL);
+        heroActions.setGravity(Gravity.CENTER);
+        hero.addView(heroActions, new LinearLayout.LayoutParams(dp(118), dp(54)));
+
+        TextView home = roundButton("⌂");
+        LinearLayout.LayoutParams homeLp = new LinearLayout.LayoutParams(dp(54), dp(54));
+        homeLp.rightMargin = dp(8);
+        heroActions.addView(home, homeLp);
+        home.setContentDescription("Imposta Glass One come Home");
+        home.setOnClickListener(v -> requestHomeRole());
+
         TextView control = roundButton("◫");
-        hero.addView(control, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        heroActions.addView(control, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        control.setContentDescription("Apri Control Center");
         control.setOnClickListener(v -> showControlCenter());
 
         search = new EditText(this);
@@ -150,51 +181,126 @@ public class LauncherActivity extends Activity {
         return root;
     }
 
+    private void promptForHomeRoleOnce() {
+        SharedPreferences p = getSharedPreferences("glass_one", MODE_PRIVATE);
+        if (p.getBoolean("home_prompted_v2", false)) return;
+        p.edit().putBoolean("home_prompted_v2", true).apply();
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isHomeRoleHeld()) requestHomeRole();
+        }, 700);
+    }
+
+    private boolean isHomeRoleHeld() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            RoleManager rm = getSystemService(RoleManager.class);
+            return rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME) && rm.isRoleHeld(RoleManager.ROLE_HOME);
+        }
+        return false;
+    }
+
+    private void requestHomeRole() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                RoleManager rm = getSystemService(RoleManager.class);
+                if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    if (rm.isRoleHeld(RoleManager.ROLE_HOME)) {
+                        Toast.makeText(this, "Glass One è già la Home predefinita", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_HOME), HOME_ROLE_REQUEST);
+                    return;
+                }
+            }
+            startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(Settings.ACTION_SETTINGS));
+            } catch (Exception ignored) {
+                Toast.makeText(this, "Apri Impostazioni > App > App predefinite > App Home", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == HOME_ROLE_REQUEST) {
+            if (resultCode == RESULT_OK || isHomeRoleHeld()) {
+                Toast.makeText(this, "Glass One impostato come Home", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "Puoi impostarlo più tardi con il pulsante ⌂", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
     private void loadApps() {
+        if (adapter == null || dock == null) return;
         PackageManager pm = getPackageManager();
         Intent q = new Intent(Intent.ACTION_MAIN);
         q.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> resolved = pm.queryIntentActivities(q, PackageManager.MATCH_ALL);
+
+        List<ResolveInfo> resolved;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                resolved = pm.queryIntentActivities(q, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL));
+            } else {
+                resolved = pm.queryIntentActivities(q, PackageManager.MATCH_ALL);
+            }
+        } catch (Exception e) {
+            resolved = new ArrayList<>();
+        }
+
+        allApps.clear();
         Set<String> seen = new HashSet<>();
         for (ResolveInfo r : resolved) {
             if (r.activityInfo == null) continue;
             String pkg = r.activityInfo.packageName;
             String cls = r.activityInfo.name;
-            if (pkg.equals(getPackageName())) continue;
+            if (pkg == null || cls == null || pkg.equals(getPackageName())) continue;
             String key = pkg + "/" + cls;
             if (!seen.add(key)) continue;
             CharSequence l = r.loadLabel(pm);
-            allApps.add(new AppItem(l == null ? pkg : l.toString(), pkg, cls, r.loadIcon(pm)));
+            Drawable icon;
+            try { icon = r.loadIcon(pm); }
+            catch (Exception e) { icon = getDrawable(android.R.drawable.sym_def_app_icon); }
+            allApps.add(new AppItem(l == null ? pkg : l.toString(), pkg, cls, icon));
         }
+
         Collections.sort(allApps, Comparator.comparing(a -> a.label.toLowerCase(Locale.ROOT)));
-        shownApps.clear();
-        shownApps.addAll(allApps);
-        adapter.notifyDataSetChanged();
+        filterApps(search == null ? "" : search.getText().toString());
         buildDock();
+
+        if (allApps.isEmpty()) {
+            Toast.makeText(this, "Nessuna app trovata. Riavvia Glass One oppure reinstallalo sopra la versione precedente.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void filterApps(String value) {
-        String q = value.trim().toLowerCase(Locale.ROOT);
+        String q = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         shownApps.clear();
         if (q.isEmpty()) shownApps.addAll(allApps);
         else for (AppItem a : allApps) {
             if (a.label.toLowerCase(Locale.ROOT).contains(q)) shownApps.add(a);
         }
-        adapter.notifyDataSetChanged();
+        if (adapter != null) adapter.notifyDataSetChanged();
     }
 
     private void buildDock() {
+        if (dock == null) return;
         dock.removeAllViews();
         String[] wanted = {
                 "com.samsung.android.dialer",
                 "com.google.android.apps.messaging",
+                "com.samsung.android.messaging",
                 "com.sec.android.app.sbrowser",
+                "com.android.chrome",
                 "com.sec.android.app.camera"
         };
         List<AppItem> selected = new ArrayList<>();
         for (String p : wanted) {
             AppItem a = byPackage(p);
             if (a != null && !selected.contains(a)) selected.add(a);
+            if (selected.size() >= 4) break;
         }
         for (AppItem a : allApps) {
             if (selected.size() >= 4) break;
@@ -209,6 +315,7 @@ public class LauncherActivity extends Activity {
             lp.leftMargin = dp(5);
             lp.rightMargin = dp(5);
             dock.addView(iv, lp);
+            iv.setContentDescription(a.label);
             iv.setOnClickListener(v -> launch(a));
         }
     }
@@ -225,9 +332,18 @@ public class LauncherActivity extends Activity {
             i.setComponent(new ComponentName(a.pkg, a.cls));
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(i);
-        } catch (Exception ignored) {
-            Intent i = getPackageManager().getLaunchIntentForPackage(a.pkg);
-            if (i != null) startActivity(i);
+        } catch (Exception first) {
+            try {
+                Intent i = getPackageManager().getLaunchIntentForPackage(a.pkg);
+                if (i != null) {
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                } else {
+                    Toast.makeText(this, "Impossibile aprire " + a.label, Toast.LENGTH_SHORT).show();
+                }
+            } catch (Exception ignored) {
+                Toast.makeText(this, "Impossibile aprire " + a.label, Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
@@ -238,6 +354,7 @@ public class LauncherActivity extends Activity {
         box.addView(actionButton("Wi‑Fi", Settings.ACTION_WIFI_SETTINGS));
         box.addView(actionButton("Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS));
         box.addView(actionButton("Sfondo", Intent.ACTION_SET_WALLPAPER));
+        box.addView(actionButton("App Home", Settings.ACTION_HOME_SETTINGS));
         box.addView(actionButton("Impostazioni", Settings.ACTION_SETTINGS));
         new AlertDialog.Builder(this)
                 .setTitle("Glass Control Center")
@@ -256,7 +373,10 @@ public class LauncherActivity extends Activity {
         lp.bottomMargin = dp(8);
         v.setLayoutParams(lp);
         v.setOnClickListener(x -> {
-            try { startActivity(new Intent(action)); } catch (Exception ignored) {}
+            try { startActivity(new Intent(action)); }
+            catch (Exception ignored) {
+                Toast.makeText(this, "Funzione non disponibile su questo dispositivo", Toast.LENGTH_SHORT).show();
+            }
         });
         return v;
     }
@@ -264,11 +384,9 @@ public class LauncherActivity extends Activity {
     private void showLauncherOptions() {
         new AlertDialog.Builder(this)
                 .setTitle("Glass One")
-                .setMessage("Vuoi impostare Glass One come schermata Home predefinita?")
-                .setPositiveButton("Imposta Home", (d, w) -> {
-                    try { startActivity(new Intent(Settings.ACTION_HOME_SETTINGS)); }
-                    catch (Exception ignored) {}
-                })
+                .setMessage("Imposta Glass One come schermata Home predefinita per usarlo come launcher.")
+                .setPositiveButton("Imposta Home", (d, w) -> requestHomeRole())
+                .setNeutralButton("Control Center", (d, w) -> showControlCenter())
                 .setNegativeButton("Annulla", null)
                 .show();
     }
