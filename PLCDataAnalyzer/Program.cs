@@ -33,7 +33,7 @@ namespace PLCDataAnalyzer
             {
                 WriteCrash(ex);
                 MessageBox.Show("Errore avvio PLC Data Analyzer:\r\n\r\n" + ex + "\r\n\r\nLog: " + LogFile,
-                    "PLC Data Analyzer v0.2", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "PLC Data Analyzer v0.3", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -70,7 +70,7 @@ namespace PLCDataAnalyzer
 
         public MainForm()
         {
-            Text = "PLC Data Analyzer v0.2 - TIA Portal Openness V21";
+            Text = "PLC Data Analyzer v0.3 - TIA Portal Openness V21";
             Width = 1420; Height = 820; MinimumSize = new Size(1080, 650);
             Font = new Font("Segoe UI", 9F); StartPosition = FormStartPosition.CenterScreen;
             BuildUi();
@@ -82,7 +82,7 @@ namespace PLCDataAnalyzer
             var top = new Panel { Dock = DockStyle.Top, Height = 125, BackColor = Color.FromArgb(245,247,250) };
             Controls.Add(top);
             top.Controls.Add(new Label { Text = "PLC Data Analyzer", Font = new Font("Segoe UI Semibold", 18), Left = 14, Top = 10, AutoSize = true });
-            top.Controls.Add(new Label { Text = "v0.2 x64", ForeColor = Color.DimGray, Left = 205, Top = 19, AutoSize = true });
+            top.Controls.Add(new Label { Text = "v0.3 x64", ForeColor = Color.DimGray, Left = 205, Top = 19, AutoSize = true });
             top.Controls.Add(new Label { Text = "PLC IP", Left = 14, Top = 61, AutoSize = true });
             ip.SetBounds(14, 80, 145, 25); top.Controls.Add(ip);
             top.Controls.Add(new Label { Text = "Interfaccia Ethernet", Left = 174, Top = 61, AutoSize = true });
@@ -123,7 +123,7 @@ namespace PLCDataAnalyzer
 
         void Init()
         {
-            Log("Avvio v0.2 - processo 64 bit: " + Environment.Is64BitProcess);
+            Log("Avvio v0.3 - processo 64 bit: " + Environment.Is64BitProcess);
             foreach (var n in NetworkInterface.GetAllNetworkInterfaces().Where(x => x.NetworkInterfaceType != NetworkInterfaceType.Loopback))
                 nic.Items.Add(n.Description);
             if (nic.Items.Count > 0) nic.SelectedIndex = 0;
@@ -194,6 +194,6 @@ namespace PLCDataAnalyzer
         }
         static string Q(string s){ return "\""+(s??"").Replace("\"","\"\"")+"\""; }
         void Log(string s){ Program.WriteLog(s); log.AppendText(DateTime.Now.ToString("HH:mm:ss")+"  "+s+Environment.NewLine); Application.DoEvents(); }
-        void Error(Exception ex){ Program.WriteLog("ERRORE: "+ex); Log("ERRORE: "+ex.Message); MessageBox.Show(this,ex.Message+"\r\n\r\nDettagli nel log:\r\n"+Program.LogFile,"PLC Data Analyzer v0.2",MessageBoxButtons.OK,MessageBoxIcon.Error); }
+        void Error(Exception ex){ Program.WriteLog("ERRORE: "+ex); Log("ERRORE: "+ex.Message); MessageBox.Show(this,ex.Message+"\r\n\r\nDettagli nel log:\r\n"+Program.LogFile,"PLC Data Analyzer v0.3",MessageBoxButtons.OK,MessageBoxIcon.Error); }
     }
 }
