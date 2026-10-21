@@ -237,7 +237,7 @@ public class LauncherActivity extends Activity {
         box.setPadding(dp(10), dp(10), dp(10), dp(10));
         box.addView(actionButton("Wi‑Fi", Settings.ACTION_WIFI_SETTINGS));
         box.addView(actionButton("Bluetooth", Settings.ACTION_BLUETOOTH_SETTINGS));
-        box.addView(actionButton("Sfondo", Settings.ACTION_WALLPAPER_SETTINGS));
+        box.addView(actionButton("Sfondo", Intent.ACTION_SET_WALLPAPER));
         box.addView(actionButton("Impostazioni", Settings.ACTION_SETTINGS));
         new AlertDialog.Builder(this)
                 .setTitle("Glass Control Center")
