@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Glass One è un launcher installato manualmente: serve per mostrare le app installate. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -21,11 +24,13 @@
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
             android:excludeFromRecents="true">
+
             <intent-filter android:priority="10">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
