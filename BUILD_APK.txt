@@ -1,0 +1,2 @@
+Automatic build configured in .github/workflows/build-apk.yml
+The workflow builds app-debug.apk and uploads it as GlassOneLauncher-debug-apk.
