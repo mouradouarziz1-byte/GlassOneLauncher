@@ -6,7 +6,8 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@drawable/ic_app"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="Word a Day"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
@@ -31,6 +32,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
     </application>
