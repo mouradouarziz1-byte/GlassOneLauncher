@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - name: Checkout StipendioSmart build branch
         uses: actions/checkout@v4
@@ -31,15 +34,12 @@ jobs:
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: current
-
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+          gradle-version: 9.6.0
 
       - name: Install Android 37
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-37"
+          sdkmanager "platform-tools" "platforms;android-37"
 
       - name: Test and build APK
         working-directory: buildsrc/StipendioSmart
