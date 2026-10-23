@@ -19,9 +19,15 @@ jobs:
       - name: Verify and unpack source
         shell: bash
         run: |
-          sha256sum stipendiosmart-v3/StipendioSmart-v3-source.zip
-          unzip -t stipendiosmart-v3/StipendioSmart-v3-source.zip
-          unzip -q stipendiosmart-v3/StipendioSmart-v3-source.zip -d buildsrc
+          cat stipendiosmart-v3/parts/part_00.bin \
+              stipendiosmart-v3/parts/part_01.bin \
+              stipendiosmart-v3/parts/part_02.bin \
+              stipendiosmart-v3/parts/part_03.bin \
+              stipendiosmart-v3/parts/part_04.bin \
+              stipendiosmart-v3/parts/part_05.bin > StipendioSmart-v3-source.zip
+          echo "9409861f541a74302bac6adf9c6fa5974ecf1acd50f45ec3ebe5c7019b63a4b2  StipendioSmart-v3-source.zip" | sha256sum -c -
+          unzip -t StipendioSmart-v3-source.zip
+          unzip -q StipendioSmart-v3-source.zip -d buildsrc
 
       - name: Java 17
         uses: actions/setup-java@v5
