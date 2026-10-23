@@ -21,7 +21,7 @@
         </activity>
 
         <receiver
-            android:name=".NotificationReceiver"
+            android:name=".DailyWordReceiver"
             android:exported="false" />
 
         <receiver
