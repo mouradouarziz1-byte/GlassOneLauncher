@@ -20,6 +20,7 @@ jobs:
         shell: bash
         run: |
           sha256sum stipendiosmart-v3/parts/p01_*.bin
+          sha256sum stipendiosmart-v3/parts/p02_*.bin
           cat stipendiosmart-v3/parts/p00_00.bin stipendiosmart-v3/parts/p00_01.bin stipendiosmart-v3/parts/p00_02.bin stipendiosmart-v3/parts/p00_03.bin > part_00.bin
           cat stipendiosmart-v3/parts/p01_00.bin stipendiosmart-v3/parts/p01_01.bin stipendiosmart-v3/parts/p01_02.bin stipendiosmart-v3/parts/p01_03.bin > part_01.bin
           cat stipendiosmart-v3/parts/p02_00.bin stipendiosmart-v3/parts/p02_01.bin stipendiosmart-v3/parts/p02_02.bin stipendiosmart-v3/parts/p02_03.bin > part_02.bin
