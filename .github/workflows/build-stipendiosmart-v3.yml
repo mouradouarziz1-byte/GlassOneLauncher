@@ -19,6 +19,7 @@ jobs:
       - name: Verify and unpack source
         shell: bash
         run: |
+          # final source-integrity gate
           sha256sum stipendiosmart-v3/parts/p01_*.bin
           sha256sum stipendiosmart-v3/parts/p02_*.bin
           cat stipendiosmart-v3/parts/p00_00.bin stipendiosmart-v3/parts/p00_01.bin stipendiosmart-v3/parts/p00_02.bin stipendiosmart-v3/parts/p00_03.bin > part_00.bin
