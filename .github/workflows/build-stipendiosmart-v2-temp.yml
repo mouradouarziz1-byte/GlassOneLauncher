@@ -17,8 +17,9 @@ jobs:
 
       - name: Rebuild and align Android project
         run: |
-          cat stipendiosmart/chunk_00.b64 stipendiosmart/chunk_01.b64 stipendiosmart/chunk_02.b64 stipendiosmart/chunk_03.b64 stipendiosmart/chunk_04.b64 stipendiosmart/chunk_05.b64 > stipendiosmart-source-full.b64
+          cat stipendiosmart/chunk_00.b64 stipendiosmart/chunk_01_0.b64 stipendiosmart/chunk_01_1.b64 stipendiosmart/chunk_01_2.b64 stipendiosmart/chunk_01_3.b64 stipendiosmart/chunk_02.b64 stipendiosmart/chunk_03.b64 stipendiosmart/chunk_04.b64 stipendiosmart/chunk_05.b64 > stipendiosmart-source-full.b64
           base64 --decode stipendiosmart-source-full.b64 > StipendioSmart-source.zip
+          echo 'd6aa5061828d3701443e97f98b64f49eb0251ca1b80e3923f5fb8a1065157d39  StipendioSmart-source.zip' | sha256sum -c -
           unzip -t StipendioSmart-source.zip
           unzip -q StipendioSmart-source.zip -d buildsrc
           sed -i 's/compileSdk = 37/compileSdk = 35/' buildsrc/StipendioSmart/app/build.gradle.kts
