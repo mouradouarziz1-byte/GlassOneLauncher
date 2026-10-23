@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +31,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -40,13 +42,11 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -74,7 +74,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,10 +89,19 @@ import kotlin.random.Random
 class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
     private lateinit var preferences: UserPreferences
+    private var notificationPermissionStateUpdater: ((Boolean) -> Unit)? = null
+    private var pendingTestNotification = false
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { granted ->
+        notificationPermissionStateUpdater?.invoke(granted)
+        if (granted) {
+            NotificationScheduler.schedule(this)
+            if (pendingTestNotification) NotificationScheduler.showNow(this)
+        }
+        pendingTestNotification = false
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -118,6 +126,11 @@ class MainActivity : ComponentActivity() {
             var learnedDates by remember { mutableStateOf(preferences.learnedDates()) }
             var favoriteDates by remember { mutableStateOf(preferences.favoriteDates()) }
             var quizCorrectDates by remember { mutableStateOf(preferences.quizCorrectDates()) }
+            var notificationsPermissionGranted by remember { mutableStateOf(notificationPermissionGranted()) }
+
+            notificationPermissionStateUpdater = { granted ->
+                notificationsPermissionGranted = granted
+            }
 
             WordADayTheme(settings.themeMode, settings.dynamicColor) {
                 WordADayApp(
@@ -125,7 +138,7 @@ class MainActivity : ComponentActivity() {
                     learnedDates = learnedDates,
                     favoriteDates = favoriteDates,
                     quizCorrectDates = quizCorrectDates,
-                    notificationsPermissionGranted = notificationPermissionGranted(),
+                    notificationsPermissionGranted = notificationsPermissionGranted,
                     onSpeak = ::speak,
                     onToggleLearned = { date ->
                         learnedDates = toggleDate(learnedDates, date)
@@ -173,9 +186,10 @@ class MainActivity : ComponentActivity() {
                         settings = preferences.settings()
                     },
                     onTestNotification = {
-                        if (notificationPermissionGranted()) {
+                        if (notificationsPermissionGranted) {
                             NotificationScheduler.showNow(this)
                         } else {
+                            pendingTestNotification = true
                             requestNotificationPermissionIfNeeded()
                         }
                     },
@@ -210,6 +224,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        notificationPermissionStateUpdater = null
         tts?.stop()
         tts?.shutdown()
         tts = null
@@ -455,7 +470,7 @@ private fun DailyWordCard(
                     contentColor = Color(0xFF4A43BB)
                 )
             ) {
-                Icon(Icons.Rounded.VolumeUp, contentDescription = null)
+                Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text("Ascolta la pronuncia", fontWeight = FontWeight.Bold)
             }
@@ -471,11 +486,13 @@ private fun DailyQuizCard(
     onCorrect: () -> Unit
 ) {
     val options = remember(date) {
-        val alternatives = listOf(
-            WordRepository.forDate(date.plusDays(1)).italian,
-            WordRepository.forDate(date.plusDays(2)).italian,
-            WordRepository.forDate(date.plusDays(3)).italian
-        ).filter { it != word.italian }.distinct().take(2)
+        val alternatives = (1L..14L)
+            .asSequence()
+            .map { WordRepository.forDate(date.plusDays(it)).italian }
+            .filter { it != word.italian }
+            .distinct()
+            .take(2)
+            .toList()
         (alternatives + word.italian).shuffled(Random(date.toEpochDay()))
     }
     var selected by rememberSaveable(date.toString()) { mutableStateOf<String?>(if (alreadyCorrect) word.italian else null) }
@@ -616,7 +633,7 @@ private fun ReviewWordCard(
                     Icon(if (favorite) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, contentDescription = "Salva")
                 }
                 IconButton(onClick = { onSpeak(word.english) }) {
-                    Icon(Icons.Rounded.VolumeUp, contentDescription = "Ascolta")
+                    Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = "Ascolta")
                 }
             }
 
@@ -646,6 +663,8 @@ private fun ProgressScreen(
     val today = LocalDate.now()
     val streak = ProgressCalculator.streak(learnedDates, today)
     val week = ProgressCalculator.learnedInLastDays(learnedDates, 7, today)
+    val weekDates = remember(today) { (6L downTo 0L).map { today.minusDays(it) } }
+    val weekdayFormatter = remember { DateTimeFormatter.ofPattern("EEEEE", Locale.ITALIAN) }
     val categoryCounts = remember(learnedDates, today) {
         learnedDates.mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
             .filter { !it.isAfter(today) && !it.isBefore(today.minusDays(179)) }
@@ -684,7 +703,6 @@ private fun ProgressScreen(
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("Ultimi 7 giorni", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        val labels = listOf("L", "M", "M", "G", "V", "S", "D")
                         week.forEachIndexed { index, done ->
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Box(
@@ -695,7 +713,11 @@ private fun ProgressScreen(
                                 ) {
                                     Text(if (done) "✓" else "·", color = if (done) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                                 }
-                                Text(labels[index], fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    weekDates[index].format(weekdayFormatter).uppercase(Locale.ITALIAN),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -909,7 +931,7 @@ private fun EmptyState(title: String, subtitle: String) {
 }
 
 @Composable
-private fun SettingsGroup(title: String, icon: ImageVector, content: @Composable Column.() -> Unit) {
+private fun SettingsGroup(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     ElevatedCard(
         shape = RoundedCornerShape(26.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
