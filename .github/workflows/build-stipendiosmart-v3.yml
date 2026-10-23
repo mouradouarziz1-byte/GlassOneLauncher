@@ -19,6 +19,7 @@ jobs:
       - name: Verify and unpack source
         shell: bash
         run: |
+          sha256sum stipendiosmart-v3/parts/part_*.bin
           cat stipendiosmart-v3/parts/part_00.bin \
               stipendiosmart-v3/parts/part_01.bin \
               stipendiosmart-v3/parts/part_02.bin \
