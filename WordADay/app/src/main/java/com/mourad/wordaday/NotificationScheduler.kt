@@ -39,10 +39,12 @@ internal object NotificationScheduler {
             if (timeInMillis <= System.currentTimeMillis()) add(Calendar.DAY_OF_YEAR, 1)
         }
 
-        alarmManager.setInexactRepeating(
+        // One alarm at a time: the receiver schedules the following day again.
+        // This recalculates the local clock time every day, so DST/timezone changes
+        // do not shift a 20:00 reminder to 19:00 or 21:00.
+        alarmManager.setAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP,
             next.timeInMillis,
-            AlarmManager.INTERVAL_DAY,
             pendingIntent
         )
     }
@@ -73,7 +75,7 @@ internal object NotificationScheduler {
 
         val content = "${word.english} = ${word.italian}"
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_app)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Parola del giorno · ${word.english}")
             .setContentText(content)
             .setStyle(
@@ -118,6 +120,7 @@ class DailyWordReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (UserPreferences(context).settings().notificationsEnabled) {
             NotificationScheduler.showNow(context)
+            NotificationScheduler.schedule(context)
         }
     }
 }
@@ -126,7 +129,9 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         when (intent?.action) {
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> NotificationScheduler.schedule(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED -> NotificationScheduler.schedule(context)
         }
     }
 }
