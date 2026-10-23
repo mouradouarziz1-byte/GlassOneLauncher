@@ -38,8 +38,9 @@ jobs:
 
       - name: Install Android 37
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-37"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-37"
 
       - name: Test and build APK
         working-directory: buildsrc/StipendioSmart
