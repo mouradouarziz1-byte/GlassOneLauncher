@@ -1,0 +1,56 @@
+name: StipendioSmart APK
+
+on:
+  push:
+    branches:
+      - stipendiosmart-apk
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rebuild source archive
+        run: |
+          cat stipendiosmart/chunk_00.b64 stipendiosmart/chunk_01.b64 stipendiosmart/chunk_02.b64 stipendiosmart/chunk_03.b64 stipendiosmart/chunk_04.b64 stipendiosmart/chunk_05.b64 > stipendiosmart-source-full.b64
+          base64 --decode stipendiosmart-source-full.b64 > StipendioSmart-source.zip
+          unzip -t StipendioSmart-source.zip
+          unzip -q StipendioSmart-source.zip -d buildsrc
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: current
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: yes | sdkmanager --licenses >/dev/null || true; sdkmanager "platforms;android-37"
+
+      - name: Unit tests
+        working-directory: buildsrc/StipendioSmart
+        run: gradle :app:testDebugUnitTest --stacktrace
+
+      - name: Build APK
+        working-directory: buildsrc/StipendioSmart
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Rename APK
+        run: cp buildsrc/StipendioSmart/app/build/outputs/apk/debug/app-debug.apk StipendioSmart-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: StipendioSmart-debug-apk
+          path: StipendioSmart-debug.apk
+          if-no-files-found: error
