@@ -19,16 +19,14 @@ jobs:
       - name: Verify and unpack source
         shell: bash
         run: |
+          sha256sum stipendiosmart-v3/parts/p01_*.bin
           cat stipendiosmart-v3/parts/p00_00.bin stipendiosmart-v3/parts/p00_01.bin stipendiosmart-v3/parts/p00_02.bin stipendiosmart-v3/parts/p00_03.bin > part_00.bin
           cat stipendiosmart-v3/parts/p01_00.bin stipendiosmart-v3/parts/p01_01.bin stipendiosmart-v3/parts/p01_02.bin stipendiosmart-v3/parts/p01_03.bin > part_01.bin
           cat stipendiosmart-v3/parts/p02_00.bin stipendiosmart-v3/parts/p02_01.bin stipendiosmart-v3/parts/p02_02.bin stipendiosmart-v3/parts/p02_03.bin > part_02.bin
           echo "378c426926bf02eddc811790baea711073a9fbebf44c99638564da4dd765429a  part_00.bin" | sha256sum -c -
           echo "b92bb5c0bfb5adb8e723fb4cc74ca80227ed8866f435f0b81a255241c27c25ff  part_01.bin" | sha256sum -c -
           echo "7fedffce5c11ab1e63e1e92dd52e9486f4ab94963fd48c165bea094d1edd3958  part_02.bin" | sha256sum -c -
-          cat part_00.bin part_01.bin part_02.bin \
-              stipendiosmart-v3/parts/part_03.bin \
-              stipendiosmart-v3/parts/part_04.bin \
-              stipendiosmart-v3/parts/part_05.bin > StipendioSmart-v3-source.zip
+          cat part_00.bin part_01.bin part_02.bin stipendiosmart-v3/parts/part_03.bin stipendiosmart-v3/parts/part_04.bin stipendiosmart-v3/parts/part_05.bin > StipendioSmart-v3-source.zip
           echo "9409861f541a74302bac6adf9c6fa5974ecf1acd50f45ec3ebe5c7019b63a4b2  StipendioSmart-v3-source.zip" | sha256sum -c -
           unzip -t StipendioSmart-v3-source.zip
           unzip -q StipendioSmart-v3-source.zip -d buildsrc
@@ -38,28 +36,23 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Install Android SDK 35
         run: |
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
       - name: Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-
       - name: Test and build V3
         working-directory: buildsrc/StipendioSmartV3
         run: |
           gradle --no-daemon :app:testDebugUnitTest --stacktrace
           gradle --no-daemon :app:assembleDebug --stacktrace
-
       - name: Rename APK
         run: cp buildsrc/StipendioSmartV3/app/build/outputs/apk/debug/app-debug.apk StipendioSmart-V3.apk
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
