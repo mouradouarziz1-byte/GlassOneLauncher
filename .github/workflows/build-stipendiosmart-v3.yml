@@ -19,10 +19,13 @@ jobs:
       - name: Verify and unpack source
         shell: bash
         run: |
-          sha256sum stipendiosmart-v3/parts/part_*.bin
-          cat stipendiosmart-v3/parts/part_00.bin \
-              stipendiosmart-v3/parts/part_01.bin \
-              stipendiosmart-v3/parts/part_02.bin \
+          cat stipendiosmart-v3/parts/p00_00.bin stipendiosmart-v3/parts/p00_01.bin stipendiosmart-v3/parts/p00_02.bin stipendiosmart-v3/parts/p00_03.bin > part_00.bin
+          cat stipendiosmart-v3/parts/p01_00.bin stipendiosmart-v3/parts/p01_01.bin stipendiosmart-v3/parts/p01_02.bin stipendiosmart-v3/parts/p01_03.bin > part_01.bin
+          cat stipendiosmart-v3/parts/p02_00.bin stipendiosmart-v3/parts/p02_01.bin stipendiosmart-v3/parts/p02_02.bin stipendiosmart-v3/parts/p02_03.bin > part_02.bin
+          echo "378c426926bf02eddc811790baea711073a9fbebf44c99638564da4dd765429a  part_00.bin" | sha256sum -c -
+          echo "b92bb5c0bfb5adb8e723fb4cc74ca80227ed8866f435f0b81a255241c27c25ff  part_01.bin" | sha256sum -c -
+          echo "7fedffce5c11ab1e63e1e92dd52e9486f4ab94963fd48c165bea094d1edd3958  part_02.bin" | sha256sum -c -
+          cat part_00.bin part_01.bin part_02.bin \
               stipendiosmart-v3/parts/part_03.bin \
               stipendiosmart-v3/parts/part_04.bin \
               stipendiosmart-v3/parts/part_05.bin > StipendioSmart-v3-source.zip
