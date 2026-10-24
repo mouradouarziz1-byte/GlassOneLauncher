@@ -2,6 +2,7 @@ package com.mourad.radiomaroc;
 
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -70,12 +71,13 @@ public class RadioService extends MediaLibraryService {
                 new AudioAttributes.Builder()
                         .setUsage(C.USAGE_MEDIA)
                         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                        .build(),
-                true);
+                        .build(), true);
         player.setHandleAudioBecomingNoisy(true);
+        player.setRepeatMode(Player.REPEAT_MODE_ALL);
+
         player.addListener(new Player.Listener() {
             @Override
-            public void onPlayerError(PlaybackException e) {
+            public void onPlayerError(PlaybackException error) {
                 if (!tryNextCandidate()) broadcastState("Errore stream");
             }
 
@@ -95,15 +97,23 @@ public class RadioService extends MediaLibraryService {
             public void onMediaItemTransition(MediaItem item, int reason) {
                 if (item == null) return;
                 Station station = StationRepository.find(item.mediaId);
-                if (station != null) {
-                    currentStationId = station.id;
-                    prefs.setLastStationId(station.id);
-                    prefs.addHistory(station.id);
-                    dynamicMetadata = "";
-                    broadcastState(player.isPlaying() ? "LIVE" : "Connessione…");
-                    if (session != null) {
-                        session.notifyChildrenChanged(RECENT_ID, prefs.historyIds().size(), null);
-                    }
+                if (station == null) return;
+
+                currentStationId = station.id;
+                prefs.setLastStationId(station.id);
+                prefs.addHistory(station.id);
+                dynamicMetadata = "";
+                candidates = buildCandidates(station);
+                candidateIndex = 0;
+
+                if (item.localConfiguration != null && item.localConfiguration.uri != null) {
+                    int index = candidates.indexOf(item.localConfiguration.uri.toString());
+                    if (index >= 0) candidateIndex = index;
+                }
+
+                broadcastState(player.isPlaying() ? "LIVE" : "Connessione…");
+                if (session != null) {
+                    session.notifyChildrenChanged(RECENT_ID, prefs.historyIds().size(), null);
                 }
             }
 
@@ -119,9 +129,7 @@ public class RadioService extends MediaLibraryService {
         });
 
         PendingIntent open = PendingIntent.getActivity(
-                this,
-                31,
-                new Intent(this, MainActivity.class),
+                this, 31, new Intent(this, MainActivity.class),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
         session = new MediaLibrarySession.Builder(this, player, new LibraryCallback())
@@ -154,9 +162,9 @@ public class RadioService extends MediaLibraryService {
                 player.clearMediaItems();
                 broadcastState("Fermata");
             } else if (ACTION_NEXT.equals(action)) {
-                playRelative(1);
+                skipBy(1);
             } else if (ACTION_PREV.equals(action)) {
-                playRelative(-1);
+                skipBy(-1);
             } else if (ACTION_SLEEP_TIMER.equals(action)) {
                 setSleepTimer(intent.getIntExtra(EXTRA_MINUTES, 0));
             } else if (ACTION_RELOAD.equals(action)) {
@@ -168,22 +176,40 @@ public class RadioService extends MediaLibraryService {
     }
 
     private void playStation(Station station) {
-        currentStationId = station.id;
-        candidates = buildCandidates(station);
-        candidateIndex = 0;
+        List<MediaItem> queue = rotatedQueue(station.id);
+        if (queue.isEmpty()) return;
         dynamicMetadata = "";
-        playCurrent(station);
-    }
-
-    private void playCurrent(Station station) {
-        if (candidates.isEmpty()) return;
-        String url = candidates.get(Math.max(0, Math.min(candidateIndex, candidates.size() - 1)));
-        player.setMediaItem(playable(station, url));
+        player.setMediaItems(queue, 0, 0L);
         player.prepare();
         player.play();
-        prefs.setLastStationId(station.id);
-        prefs.addHistory(station.id);
         broadcastState("Connessione…");
+    }
+
+    private List<MediaItem> rotatedQueue(String selectedId) {
+        List<Station> all = StationRepository.all();
+        List<MediaItem> queue = new ArrayList<>();
+        if (all.isEmpty()) return queue;
+        int start = StationRepository.indexOf(selectedId);
+        if (start < 0) start = 0;
+        for (int offset = 0; offset < all.size(); offset++) {
+            Station station = all.get((start + offset) % all.size());
+            queue.add(catalog(station));
+        }
+        return queue;
+    }
+
+    private void skipBy(int direction) {
+        int count = player.getMediaItemCount();
+        if (count <= 1) {
+            Station station = StationRepository.find(currentStationId);
+            if (station == null) station = StationRepository.find(prefs.lastStationId());
+            if (station != null) playStation(station);
+            return;
+        }
+        int current = Math.max(0, player.getCurrentMediaItemIndex());
+        int target = (current + direction + count) % count;
+        player.seekTo(target, 0L);
+        player.play();
     }
 
     private boolean tryNextCandidate() {
@@ -191,8 +217,16 @@ public class RadioService extends MediaLibraryService {
         if (station == null) return false;
         if (candidates.isEmpty()) candidates = buildCandidates(station);
         if (candidateIndex + 1 >= candidates.size()) return false;
+
         candidateIndex++;
-        playCurrent(station);
+        int currentIndex = player.getCurrentMediaItemIndex();
+        if (currentIndex < 0 || currentIndex >= player.getMediaItemCount()) return false;
+
+        MediaItem fallback = playable(station, candidates.get(candidateIndex));
+        player.replaceMediaItem(currentIndex, fallback);
+        player.seekTo(currentIndex, 0L);
+        player.prepare();
+        player.play();
         return true;
     }
 
@@ -206,15 +240,6 @@ public class RadioService extends MediaLibraryService {
 
     private static void addUnique(List<String> list, String value) {
         if (value != null && !value.isEmpty() && !list.contains(value)) list.add(value);
-    }
-
-    private void playRelative(int direction) {
-        List<Station> all = StationRepository.all();
-        if (all.isEmpty()) return;
-        int index = StationRepository.indexOf(currentStationId);
-        if (index < 0) index = StationRepository.indexOf(prefs.lastStationId());
-        if (index < 0) index = 0;
-        playStation(all.get((index + direction + all.size()) % all.size()));
     }
 
     private void setSleepTimer(int minutes) {
@@ -244,17 +269,19 @@ public class RadioService extends MediaLibraryService {
     }
 
     private MediaItem playable(Station station, String url) {
-        MediaMetadata metadata = new MediaMetadata.Builder()
+        MediaMetadata.Builder metadata = new MediaMetadata.Builder()
                 .setTitle(station.name)
                 .setArtist(station.subtitle())
                 .setAlbumTitle(station.category)
                 .setIsBrowsable(false)
-                .setIsPlayable(true)
-                .build();
+                .setIsPlayable(true);
+        if (station.artworkUrl != null && !station.artworkUrl.isEmpty()) {
+            metadata.setArtworkUri(Uri.parse(station.artworkUrl));
+        }
         return new MediaItem.Builder()
                 .setMediaId(station.id)
                 .setUri(url)
-                .setMediaMetadata(metadata)
+                .setMediaMetadata(metadata.build())
                 .build();
     }
 
@@ -272,7 +299,6 @@ public class RadioService extends MediaLibraryService {
         return new MediaItem.Builder().setMediaId(id).setMediaMetadata(metadata).build();
     }
 
-    /** Android Auto works best with four or fewer browsable root children. */
     private List<MediaItem> carRootItems() {
         List<MediaItem> items = new ArrayList<>();
         items.add(node(FAVORITES_ID, "Preferiti"));
@@ -306,9 +332,7 @@ public class RadioService extends MediaLibraryService {
 
         List<Station> result = new ArrayList<>();
         if (FAVORITES_ID.equals(parentId)) {
-            for (Station station : StationRepository.all()) {
-                if (prefs.isFavorite(station.id)) result.add(station);
-            }
+            for (Station station : StationRepository.all()) if (prefs.isFavorite(station.id)) result.add(station);
             return result;
         }
         if (RECENT_ID.equals(parentId)) {
@@ -338,11 +362,9 @@ public class RadioService extends MediaLibraryService {
 
     private LibraryParams resultParams(LibraryParams requested) {
         Bundle extras = new Bundle();
-        extras.putInt(
-                MediaConstants.EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+        extras.putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
                 MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_LIST_ITEM);
-        extras.putInt(
-                MediaConstants.EXTRAS_KEY_CONTENT_STYLE_PLAYABLE,
+        extras.putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_PLAYABLE,
                 MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM);
         LibraryParams.Builder builder = new LibraryParams.Builder().setExtras(extras);
         if (requested != null) {
@@ -393,7 +415,8 @@ public class RadioService extends MediaLibraryService {
                 MediaSession.ControllerInfo browser,
                 String id) {
             if (ROOT_ID.equals(id)) {
-                return Futures.immediateFuture(LibraryResult.ofItem(node(ROOT_ID, "Radio Maroc"), resultParams(null)));
+                return Futures.immediateFuture(
+                        LibraryResult.ofItem(node(ROOT_ID, "Radio Maroc"), resultParams(null)));
             }
             if (FAVORITES_ID.equals(id) || RECENT_ID.equals(id) || POPULAR_ID.equals(id)
                     || CATEGORIES_ID.equals(id) || ALL_ID.equals(id) || id.startsWith(CAT_PREFIX)) {
@@ -417,10 +440,18 @@ public class RadioService extends MediaLibraryService {
                 MediaSession mediaSession,
                 MediaSession.ControllerInfo controller,
                 List<MediaItem> requested) {
+            if (requested != null && !requested.isEmpty()) {
+                Station first = StationRepository.find(requested.get(0).mediaId);
+                if (first != null) {
+                    return Futures.immediateFuture(rotatedQueue(first.id));
+                }
+            }
             List<MediaItem> result = new ArrayList<>();
-            for (MediaItem item : requested) {
-                Station station = StationRepository.find(item.mediaId);
-                result.add(station != null ? catalog(station) : item);
+            if (requested != null) {
+                for (MediaItem item : requested) {
+                    Station station = StationRepository.find(item.mediaId);
+                    result.add(station != null ? catalog(station) : item);
+                }
             }
             return Futures.immediateFuture(result);
         }
@@ -431,7 +462,8 @@ public class RadioService extends MediaLibraryService {
                 MediaSession.ControllerInfo browser,
                 String query,
                 LibraryParams params) {
-            mediaSession.notifySearchResultChanged(browser, query, StationRepository.search(query).size(), resultParams(params));
+            mediaSession.notifySearchResultChanged(
+                    browser, query, StationRepository.search(query).size(), resultParams(params));
             return Futures.immediateFuture(LibraryResult.ofVoid(resultParams(params)));
         }
 
