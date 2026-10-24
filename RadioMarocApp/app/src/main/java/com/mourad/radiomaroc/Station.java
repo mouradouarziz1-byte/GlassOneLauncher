@@ -10,9 +10,11 @@ public final class Station {
     public final String backupUrl;
     public final String lowDataUrl;
     public final String badge;
+    public final String artworkUrl;
 
     public Station(String id, String name, String city, String category, String description,
-                   String primaryUrl, String backupUrl, String lowDataUrl, String badge) {
+                   String primaryUrl, String backupUrl, String lowDataUrl, String badge,
+                   String artworkUrl) {
         this.id = id;
         this.name = name;
         this.city = city;
@@ -22,6 +24,7 @@ public final class Station {
         this.backupUrl = backupUrl;
         this.lowDataUrl = lowDataUrl;
         this.badge = badge;
+        this.artworkUrl = artworkUrl;
     }
 
     public String subtitle() {
