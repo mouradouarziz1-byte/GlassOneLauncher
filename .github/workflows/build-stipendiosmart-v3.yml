@@ -1,4 +1,4 @@
-name: Build StipendioSmart V3 APK
+name: Build StipendioSmart V3.1 Performance APK
 
 on:
   push:
@@ -11,17 +11,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout V3 source
+      - name: Checkout V3.1 source
         uses: actions/checkout@v4
         with:
-          ref: stipendiosmart-v3
+          ref: stipendiosmart-v31
 
-      - name: Verify and unpack source
+      - name: Verify, unpack and apply performance patch
         shell: bash
         run: |
-          # final source-integrity gate
-          sha256sum stipendiosmart-v3/parts/p01_*.bin
-          sha256sum stipendiosmart-v3/parts/p02_*.bin
           cat stipendiosmart-v3/parts/p00_00.bin stipendiosmart-v3/parts/p00_01.bin stipendiosmart-v3/parts/p00_02.bin stipendiosmart-v3/parts/p00_03.bin > part_00.bin
           cat stipendiosmart-v3/parts/p01_00.bin stipendiosmart-v3/parts/p01_01.bin stipendiosmart-v3/parts/p01_02.bin stipendiosmart-v3/parts/p01_03.bin > part_01.bin
           cat stipendiosmart-v3/parts/p02_00.bin stipendiosmart-v3/parts/p02_01.bin stipendiosmart-v3/parts/p02_02.bin stipendiosmart-v3/parts/p02_03.bin > part_02.bin
@@ -32,32 +29,44 @@ jobs:
           echo "9409861f541a74302bac6adf9c6fa5974ecf1acd50f45ec3ebe5c7019b63a4b2  StipendioSmart-v3-source.zip" | sha256sum -c -
           unzip -t StipendioSmart-v3-source.zip
           unzip -q StipendioSmart-v3-source.zip -d buildsrc
+          cd buildsrc/StipendioSmartV3
+          patch -p1 < ../../stipendiosmart-v3/v31-performance.patch
+          grep -q 'versionName = "0.3.1"' app/build.gradle.kts
+          grep -q 'isMinifyEnabled = true' app/build.gradle.kts
 
       - name: Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+
       - name: Install Android SDK 35
         run: |
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
       - name: Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Test and build V3
+
+      - name: Test and build optimized release
         working-directory: buildsrc/StipendioSmartV3
         run: |
           gradle --no-daemon :app:testDebugUnitTest --stacktrace
-          gradle --no-daemon :app:assembleDebug --stacktrace
+          gradle --no-daemon :app:assembleRelease --stacktrace
+
       - name: Rename APK
-        run: cp buildsrc/StipendioSmartV3/app/build/outputs/apk/debug/app-debug.apk StipendioSmart-V3.apk
+        run: cp buildsrc/StipendioSmartV3/app/build/outputs/apk/release/app-release.apk StipendioSmart-V3.1-Performance.apk
+
+      - name: Verify APK archive
+        run: unzip -t StipendioSmart-V3.1-Performance.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: StipendioSmart-V3-apk
-          path: StipendioSmart-V3.apk
+          name: StipendioSmart-V3.1-Performance-apk
+          path: StipendioSmart-V3.1-Performance.apk
           if-no-files-found: error
