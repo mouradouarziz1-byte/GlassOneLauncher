@@ -1,0 +1,141 @@
+--- a/app/src/main/java/com/stipendiosmart/app/ui/StipendioSmartApp.kt
++++ b/app/src/main/java/com/stipendiosmart/app/ui/StipendioSmartApp.kt
+@@ -83,7 +83,7 @@
+             NavigationBar(
+                 modifier = Modifier.height(86.dp),
+                 containerColor = MaterialTheme.colorScheme.surface,
+-                tonalElevation = 8.dp
++                tonalElevation = 0.dp
+             ) {
+                 MainScreen.entries.forEach { item ->
+                     NavigationBarItem(
+@@ -157,7 +157,9 @@
+     onPlan: () -> Unit
+ ) {
+     val cycleExpenses = remember(profile, expenses) { BudgetEngine.cycleExpenses(profile, expenses) }
+-    val categoryTotals = cycleExpenses.groupBy { it.category }.mapValues { it.value.sumOf(Expense::amount) }.entries.sortedByDescending { it.value }
++    val categoryTotals = remember(cycleExpenses) {
++        cycleExpenses.groupBy { it.category }.mapValues { it.value.sumOf(Expense::amount) }.entries.sortedByDescending { it.value }
++    }
+     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 28.dp)) {
+         item { TopGreeting(result) }
+         item { BalanceHero(result, onAdd) }
+@@ -167,7 +169,7 @@
+         item { CoachCard(result, profile) }
+         item { SectionHeader("Spese per categoria", if (cycleExpenses.isEmpty()) "Appariranno appena registri una spesa" else "Dal ${shortDate(result.cycleStart)} a oggi") }
+         if (categoryTotals.isEmpty()) item { EmptyState(onAdd) }
+-        else items(categoryTotals.take(4)) { entry -> CategoryBar(entry.key, entry.value, result.flexibleSpent) }
++        else items(categoryTotals.take(4), key = { it.key }) { entry -> CategoryBar(entry.key, entry.value, result.flexibleSpent) }
+         item { SectionHeader("Un numero utile", "Quello che spesso il conto corrente non ti dice") }
+         item { RealSalaryCard(result) }
+     }
+@@ -196,9 +198,10 @@
+ @Composable
+ private fun BalanceHero(result: BudgetResult, onAdd: () -> Unit) {
+     val progress = if (result.flexibleBudget <= 0) 0f else (result.trulyFreeMoney.coerceAtLeast(0.0) / result.flexibleBudget).toFloat().coerceIn(0f, 1f)
++    val heroBrush = remember { Brush.linearGradient(listOf(Navy, Color(0xFF274C91), Blue)) }
+     Box(
+         Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(32.dp))
+-            .background(Brush.linearGradient(listOf(Navy, Color(0xFF274C91), Blue)))
++            .background(heroBrush)
+             .padding(22.dp)
+     ) {
+         Column {
+@@ -269,7 +272,7 @@
+ 
+ @Composable
+ private fun QuickAction(modifier: Modifier, icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+-    Surface(modifier.clickable(onClick = onClick), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
++    Surface(modifier.clickable(onClick = onClick), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 0.dp) {
+         Column(Modifier.padding(vertical = 15.dp, horizontal = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+             Box(Modifier.size(46.dp).clip(CircleShape).background(PaleBlue), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Blue, modifier = Modifier.size(26.dp)) }
+             Spacer(Modifier.height(8.dp)); Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp); Text(subtitle, color = Muted, fontSize = 10.sp)
+@@ -335,7 +338,9 @@
+ @Composable
+ private fun MovementsScreen(modifier: Modifier, profile: UserProfile, result: BudgetResult, expenses: List<Expense>, onDelete: (Expense) -> Unit) {
+     val cycle = remember(profile, expenses) { BudgetEngine.cycleExpenses(profile, expenses) }
+-    val grouped = cycle.groupBy { it.category }.mapValues { it.value.sumOf(Expense::amount) }.entries.sortedByDescending { it.value }
++    val grouped = remember(cycle) {
++        cycle.groupBy { it.category }.mapValues { it.value.sumOf(Expense::amount) }.entries.sortedByDescending { it.value }
++    }
+     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp)) {
+         item { PageTitle("Movimenti", "Tutto quello che hai speso in questo ciclo") }
+         item {
+@@ -348,11 +353,11 @@
+         }
+         if (grouped.isNotEmpty()) {
+             item { SectionHeader("Categorie", "Le voci che pesano di più") }
+-            items(grouped.take(5)) { CategoryBar(it.key, it.value, result.flexibleSpent) }
++            items(grouped.take(5), key = { it.key }) { CategoryBar(it.key, it.value, result.flexibleSpent) }
+         }
+         item { SectionHeader("Cronologia", if (cycle.isEmpty()) "Nessun movimento" else "Più recenti prima") }
+         if (cycle.isEmpty()) item { EmptyState() }
+-        else items(cycle) { ExpenseRow(it, onDelete) }
++        else items(cycle, key = { it.id }) { ExpenseRow(it, onDelete) }
+     }
+ }
+ 
+@@ -548,7 +553,7 @@
+     SettingsCard {
+         Text("Come vai al lavoro?", color = Muted, fontSize = 12.sp)
+         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-            items(TransportMode.entries) { mode ->
++            items(TransportMode.entries, key = { it.name }) { mode ->
+                 FilterChip(selected = p.transportMode == mode, onClick = { onChange(p.copy(transportMode = mode)) }, label = { Text(mode.label) }, leadingIcon = { Icon(transportIcon(mode), null, modifier = Modifier.size(20.dp)) })
+             }
+         }
+@@ -598,7 +603,7 @@
+                 }
+                 2 -> {
+                     Text("Scegli il mezzo principale", color = Muted, fontSize = 12.sp)
+-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(TransportMode.entries) { m -> AssistChip(onClick = { p = p.copy(transportMode = m) }, label = { Text(m.label, fontWeight = if (p.transportMode == m) FontWeight.Bold else FontWeight.Normal) }, leadingIcon = { Icon(transportIcon(m), null, tint = if (p.transportMode == m) Blue else Muted) }, colors = AssistChipDefaults.assistChipColors(containerColor = if (p.transportMode == m) PaleBlue else MaterialTheme.colorScheme.surface)) } }
++                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(TransportMode.entries, key = { it.name }) { m -> AssistChip(onClick = { p = p.copy(transportMode = m) }, label = { Text(m.label, fontWeight = if (p.transportMode == m) FontWeight.Bold else FontWeight.Normal) }, leadingIcon = { Icon(transportIcon(m), null, tint = if (p.transportMode == m) Blue else Muted) }, colors = AssistChipDefaults.assistChipColors(containerColor = if (p.transportMode == m) PaleBlue else MaterialTheme.colorScheme.surface)) } }
+                     when (p.transportMode) {
+                         TransportMode.CAR, TransportMode.MOTORBIKE -> { NumberField("Km solo andata", p.oneWayKm) { p = p.copy(oneWayKm = it) }; NumberField("Consumo L/100 km", p.fuelConsumptionL100Km) { p = p.copy(fuelConsumptionL100Km = it) }; MoneyField("Costi fissi auto/moto al mese", p.carFixedMonthly) { p = p.copy(carFixedMonthly = it) } }
+                         TransportMode.TRAIN, TransportMode.BUS -> MoneyField("Costo trasporto al mese", p.publicTransportMonthly) { p = p.copy(publicTransportMonthly = it) }
+@@ -636,7 +641,7 @@
+             OutlinedTextField(amount, { amount = sanitize(it) }, Modifier.fillMaxWidth(), label = { Text("Importo") }, prefix = { Text("€ ") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = RoundedCornerShape(18.dp))
+             Spacer(Modifier.height(10.dp)); OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Descrizione · facoltativa") }, placeholder = { Text("Es. supermercato") }, singleLine = true, shape = RoundedCornerShape(18.dp))
+             Spacer(Modifier.height(14.dp)); Text("Categoria", color = Muted, fontSize = 12.sp); Spacer(Modifier.height(8.dp))
+-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(cats) { c -> FilterChip(selected = c == category, onClick = { category = c }, label = { Text(c) }, leadingIcon = { CategorySmallIcon(c) }) } }
++            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(cats, key = { it }) { c -> FilterChip(selected = c == category, onClick = { category = c }, label = { Text(c) }, leadingIcon = { CategorySmallIcon(c) }) } }
+             Spacer(Modifier.height(20.dp)); Button(onClick = { val v = money(amount); if (v > 0) onAdd(Expense(title = title.ifBlank { category }, amount = v, category = category)) }, Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(18.dp)) { Text("Salva spesa", fontWeight = FontWeight.Bold) }
+         }
+     }
+@@ -677,7 +682,10 @@
+ private fun sanitize(s: String): String { var x = s.replace(',', '.').filter { it.isDigit() || it == '.' }; val i = x.indexOf('.'); if (i >= 0) x = x.substring(0, i + 1) + x.substring(i + 1).replace(".", ""); return x }
+ private fun money(s: String) = s.toDoubleOrNull() ?: 0.0
+ private fun numberInput(v: Double) = if (v == v.toInt().toDouble()) v.toInt().toString() else "%.2f".format(Locale.US, v)
+-private fun euro(v: Double): String = NumberFormat.getCurrencyInstance(Locale.ITALY).format(v.coerceAtLeast(0.0)).replace(",00", "")
+-private fun friendlyDate(iso: String): String = runCatching { LocalDate.parse(iso).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.ITALIAN)) }.getOrDefault(iso)
+-private fun shortDate(iso: String): String = runCatching { LocalDate.parse(iso).format(DateTimeFormatter.ofPattern("d MMM", Locale.ITALIAN)) }.getOrDefault(iso)
++private val euroFormatter: NumberFormat = NumberFormat.getCurrencyInstance(Locale.ITALY)
++private val friendlyDateFormatter: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.ITALIAN)
++private val shortDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.ITALIAN)
++private fun euro(v: Double): String = euroFormatter.format(v.coerceAtLeast(0.0)).replace(",00", "")
++private fun friendlyDate(iso: String): String = runCatching { LocalDate.parse(iso).format(friendlyDateFormatter) }.getOrDefault(iso)
++private fun shortDate(iso: String): String = runCatching { LocalDate.parse(iso).format(shortDateFormatter) }.getOrDefault(iso)
+ private fun greeting(): String = when (java.time.LocalTime.now().hour) { in 5..11 -> "Buongiorno"; in 12..17 -> "Buon pomeriggio"; else -> "Buonasera" }
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -12,15 +12,17 @@
+         applicationId = "com.stipendiosmart.app"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 3
+-        versionName = "0.3.0"
++        versionCode = 4
++        versionName = "0.3.1"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables.useSupportLibrary = true
+     }
+ 
+     buildTypes {
+         release {
+-            isMinifyEnabled = false
++            isMinifyEnabled = true
++            isShrinkResources = true
++            signingConfig = signingConfigs.getByName("debug")
+             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+         }
+     }
