@@ -2,6 +2,7 @@ package com.mourad.radiomaroc;
 
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -11,8 +12,10 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.session.LibraryResult;
+import androidx.media3.session.MediaConstants;
 import androidx.media3.session.MediaLibraryService;
 import androidx.media3.session.MediaSession;
 
@@ -23,6 +26,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.util.ArrayList;
 import java.util.List;
 
+@UnstableApi
 public class RadioService extends MediaLibraryService {
     public static final String ACTION_PLAY_STATION = "com.mourad.radiomaroc.PLAY_STATION";
     public static final String ACTION_TOGGLE = "com.mourad.radiomaroc.TOGGLE";
@@ -38,75 +42,425 @@ public class RadioService extends MediaLibraryService {
     public static final String EXTRA_METADATA = "metadata";
     public static final String EXTRA_SLEEP_DEADLINE = "sleep_deadline";
 
-    private static final String ROOT_ID="root", ALL_ID="all", FAVORITES_ID="favorites", RECENT_ID="recent", CAT_PREFIX="cat:";
+    private static final String ROOT_ID = "root";
+    private static final String FAVORITES_ID = "favorites";
+    private static final String RECENT_ID = "recent";
+    private static final String POPULAR_ID = "popular";
+    private static final String CATEGORIES_ID = "categories";
+    private static final String ALL_ID = "all";
+    private static final String CAT_PREFIX = "cat:";
+
     private ExoPlayer player;
     private MediaLibrarySession session;
     private Prefs prefs;
-    private final Handler handler=new Handler(Looper.getMainLooper());
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private String currentStationId;
-    private List<String> candidates=new ArrayList<>();
+    private List<String> candidates = new ArrayList<>();
     private int candidateIndex;
     private long sleepDeadline;
     private Runnable sleepRunnable;
-    private String dynamicMetadata="";
+    private String dynamicMetadata = "";
 
-    @Override public void onCreate(){
-        super.onCreate(); prefs=new Prefs(this);
-        player=new ExoPlayer.Builder(this).build();
-        player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),true);
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        prefs = new Prefs(this);
+        player = new ExoPlayer.Builder(this).build();
+        player.setAudioAttributes(
+                new AudioAttributes.Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                        .build(),
+                true);
         player.setHandleAudioBecomingNoisy(true);
-        player.addListener(new Player.Listener(){
-            @Override public void onPlayerError(PlaybackException e){if(!tryNextCandidate())broadcastState("Errore stream");}
-            @Override public void onIsPlayingChanged(boolean playing){broadcastState(playing?"LIVE":"In pausa");}
-            @Override public void onPlaybackStateChanged(int state){if(state==Player.STATE_BUFFERING)broadcastState("Connessione…");else if(state==Player.STATE_READY)broadcastState(player.isPlaying()?"LIVE":"Pronta");else if(state==Player.STATE_ENDED)broadcastState("Stream terminato");}
-            @Override public void onMediaItemTransition(MediaItem item,int reason){if(item==null)return;Station s=StationRepository.find(item.mediaId);if(s!=null){currentStationId=s.id;prefs.setLastStationId(s.id);prefs.addHistory(s.id);dynamicMetadata="";broadcastState(player.isPlaying()?"LIVE":"Connessione…");}}
-            @Override public void onMediaMetadataChanged(MediaMetadata m){if(m.title!=null){String t=m.title.toString();Station s=StationRepository.find(currentStationId);if(s==null||!s.name.equalsIgnoreCase(t))dynamicMetadata=t;}broadcastState(player.isPlaying()?"LIVE":"Pronta");}
+        player.addListener(new Player.Listener() {
+            @Override
+            public void onPlayerError(PlaybackException e) {
+                if (!tryNextCandidate()) broadcastState("Errore stream");
+            }
+
+            @Override
+            public void onIsPlayingChanged(boolean playing) {
+                broadcastState(playing ? "LIVE" : "In pausa");
+            }
+
+            @Override
+            public void onPlaybackStateChanged(int state) {
+                if (state == Player.STATE_BUFFERING) broadcastState("Connessione…");
+                else if (state == Player.STATE_READY) broadcastState(player.isPlaying() ? "LIVE" : "Pronta");
+                else if (state == Player.STATE_ENDED) broadcastState("Stream terminato");
+            }
+
+            @Override
+            public void onMediaItemTransition(MediaItem item, int reason) {
+                if (item == null) return;
+                Station station = StationRepository.find(item.mediaId);
+                if (station != null) {
+                    currentStationId = station.id;
+                    prefs.setLastStationId(station.id);
+                    prefs.addHistory(station.id);
+                    dynamicMetadata = "";
+                    broadcastState(player.isPlaying() ? "LIVE" : "Connessione…");
+                    if (session != null) {
+                        session.notifyChildrenChanged(RECENT_ID, prefs.historyIds().size(), null);
+                    }
+                }
+            }
+
+            @Override
+            public void onMediaMetadataChanged(MediaMetadata metadata) {
+                if (metadata.title != null) {
+                    String title = metadata.title.toString();
+                    Station station = StationRepository.find(currentStationId);
+                    if (station == null || !station.name.equalsIgnoreCase(title)) dynamicMetadata = title;
+                }
+                broadcastState(player.isPlaying() ? "LIVE" : "Pronta");
+            }
         });
-        PendingIntent open=PendingIntent.getActivity(this,31,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
-        session=new MediaLibrarySession.Builder(this,player,new LibraryCallback()).setSessionActivity(open).build();
+
+        PendingIntent open = PendingIntent.getActivity(
+                this,
+                31,
+                new Intent(this, MainActivity.class),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+        session = new MediaLibrarySession.Builder(this, player, new LibraryCallback())
+                .setSessionActivity(open)
+                .build();
         addSession(session);
     }
 
-    @Override public MediaLibrarySession onGetSession(MediaSession.ControllerInfo controllerInfo){return session;}
+    @Override
+    public MediaLibrarySession onGetSession(MediaSession.ControllerInfo controllerInfo) {
+        return session;
+    }
 
-    @Override public int onStartCommand(Intent i,int flags,int startId){
-        if(i!=null){String a=i.getAction();
-            if(ACTION_PLAY_STATION.equals(a)){Station s=StationRepository.find(i.getStringExtra(EXTRA_STATION_ID));if(s!=null)playStation(s);}
-            else if(ACTION_TOGGLE.equals(a)){if(player.isPlaying())player.pause();else if(player.getCurrentMediaItem()!=null)player.play();else{Station s=StationRepository.find(prefs.lastStationId());if(s!=null)playStation(s);}}
-            else if(ACTION_STOP.equals(a)){player.stop();player.clearMediaItems();broadcastState("Fermata");}
-            else if(ACTION_NEXT.equals(a))playRelative(1);
-            else if(ACTION_PREV.equals(a))playRelative(-1);
-            else if(ACTION_SLEEP_TIMER.equals(a))setSleepTimer(i.getIntExtra(EXTRA_MINUTES,0));
-            else if(ACTION_RELOAD.equals(a)){Station s=StationRepository.find(currentStationId);if(s!=null)playStation(s);}
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null) {
+            String action = intent.getAction();
+            if (ACTION_PLAY_STATION.equals(action)) {
+                Station station = StationRepository.find(intent.getStringExtra(EXTRA_STATION_ID));
+                if (station != null) playStation(station);
+            } else if (ACTION_TOGGLE.equals(action)) {
+                if (player.isPlaying()) player.pause();
+                else if (player.getCurrentMediaItem() != null) player.play();
+                else {
+                    Station station = StationRepository.find(prefs.lastStationId());
+                    if (station != null) playStation(station);
+                }
+            } else if (ACTION_STOP.equals(action)) {
+                player.stop();
+                player.clearMediaItems();
+                broadcastState("Fermata");
+            } else if (ACTION_NEXT.equals(action)) {
+                playRelative(1);
+            } else if (ACTION_PREV.equals(action)) {
+                playRelative(-1);
+            } else if (ACTION_SLEEP_TIMER.equals(action)) {
+                setSleepTimer(intent.getIntExtra(EXTRA_MINUTES, 0));
+            } else if (ACTION_RELOAD.equals(action)) {
+                Station station = StationRepository.find(currentStationId);
+                if (station != null) playStation(station);
+            }
         }
-        return super.onStartCommand(i,flags,startId);
+        return super.onStartCommand(intent, flags, startId);
     }
 
-    private void playStation(Station s){currentStationId=s.id;candidates=buildCandidates(s);candidateIndex=0;dynamicMetadata="";playCurrent(s);}
-    private void playCurrent(Station s){if(candidates.isEmpty())return;String url=candidates.get(Math.max(0,Math.min(candidateIndex,candidates.size()-1)));player.setMediaItem(playable(s,url));player.prepare();player.play();prefs.setLastStationId(s.id);prefs.addHistory(s.id);broadcastState("Connessione…");}
-    private boolean tryNextCandidate(){Station s=StationRepository.find(currentStationId);if(s==null)return false;if(candidates.isEmpty())candidates=buildCandidates(s);if(candidateIndex+1>=candidates.size())return false;candidateIndex++;playCurrent(s);return true;}
-    private List<String> buildCandidates(Station s){List<String> u=new ArrayList<>();if(prefs.isDataSaver())addUnique(u,s.lowDataUrl);addUnique(u,s.primaryUrl);addUnique(u,s.backupUrl);return u;}
-    private static void addUnique(List<String> l,String v){if(v!=null&&!v.isEmpty()&&!l.contains(v))l.add(v);}
-    private void playRelative(int d){List<Station>a=StationRepository.all();if(a.isEmpty())return;int x=StationRepository.indexOf(currentStationId);if(x<0)x=StationRepository.indexOf(prefs.lastStationId());if(x<0)x=0;playStation(a.get((x+d+a.size())%a.size()));}
-    private void setSleepTimer(int m){if(sleepRunnable!=null)handler.removeCallbacks(sleepRunnable);sleepRunnable=null;sleepDeadline=0;if(m>0){sleepDeadline=System.currentTimeMillis()+m*60000L;sleepRunnable=()->{player.pause();sleepDeadline=0;broadcastState("Sleep timer terminato");};handler.postDelayed(sleepRunnable,m*60000L);}broadcastState(player.isPlaying()?"LIVE":"In pausa");}
-    private void broadcastState(String state){Intent i=new Intent(ACTION_STATE);i.setPackage(getPackageName());i.putExtra(EXTRA_STATION_ID,currentStationId==null?prefs.lastStationId():currentStationId);i.putExtra(EXTRA_STATE,state);i.putExtra(EXTRA_METADATA,dynamicMetadata==null?"":dynamicMetadata);i.putExtra(EXTRA_SLEEP_DEADLINE,sleepDeadline);sendBroadcast(i);}
-
-    private MediaItem playable(Station s,String url){MediaMetadata m=new MediaMetadata.Builder().setTitle(s.name).setArtist(s.subtitle()).setAlbumTitle(s.category).setIsBrowsable(false).setIsPlayable(true).build();return new MediaItem.Builder().setMediaId(s.id).setUri(url).setMediaMetadata(m).build();}
-    private MediaItem catalog(Station s){List<String>u=buildCandidates(s);return playable(s,u.isEmpty()?s.primaryUrl:u.get(0));}
-    private MediaItem node(String id,String title){MediaMetadata m=new MediaMetadata.Builder().setTitle(title).setIsBrowsable(true).setIsPlayable(false).build();return new MediaItem.Builder().setMediaId(id).setMediaMetadata(m).build();}
-    private List<MediaItem> roots(){List<MediaItem>i=new ArrayList<>();i.add(node(FAVORITES_ID,"Preferiti"));i.add(node(RECENT_ID,"Ascoltate di recente"));i.add(node(ALL_ID,"Tutte le radio"));i.add(node(CAT_PREFIX+StationRepository.CAT_MUSIC,"Musica"));i.add(node(CAT_PREFIX+StationRepository.CAT_NEWS,"News"));i.add(node(CAT_PREFIX+StationRepository.CAT_SPORT,"Sport"));i.add(node(CAT_PREFIX+StationRepository.CAT_RELIGIOUS,"Religiosa"));i.add(node(CAT_PREFIX+StationRepository.CAT_AMAZIGH,"Amazigh"));i.add(node(CAT_PREFIX+StationRepository.CAT_REGIONAL,"Regionali"));i.add(node(CAT_PREFIX+StationRepository.CAT_GENERAL,"Generaliste"));return i;}
-    private List<Station> stationsFor(String p){if(ALL_ID.equals(p))return StationRepository.all();List<Station>r=new ArrayList<>();if(FAVORITES_ID.equals(p)){for(Station s:StationRepository.all())if(prefs.isFavorite(s.id))r.add(s);return r;}if(RECENT_ID.equals(p)){for(String id:prefs.historyIds()){Station s=StationRepository.find(id);if(s!=null)r.add(s);}return r;}if(p!=null&&p.startsWith(CAT_PREFIX))return StationRepository.byCategory(p.substring(CAT_PREFIX.length()));return r;}
-    private List<MediaItem> items(List<Station>s){List<MediaItem>r=new ArrayList<>();for(Station x:s)r.add(catalog(x));return r;}
-    private static List<MediaItem> page(List<MediaItem>s,int p,int size){int from=Math.min(s.size(),Math.max(0,p*size));int to=Math.min(s.size(),from+size);return new ArrayList<>(s.subList(from,to));}
-
-    private final class LibraryCallback implements MediaLibrarySession.Callback{
-        @Override public ListenableFuture<LibraryResult<MediaItem>> onGetLibraryRoot(MediaLibrarySession s,MediaSession.ControllerInfo b,LibraryParams p){return Futures.immediateFuture(LibraryResult.ofItem(node(ROOT_ID,"Radio Maroc"),p));}
-        @Override public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetChildren(MediaLibrarySession s,MediaSession.ControllerInfo b,String parent,int pg,int size,LibraryParams p){List<MediaItem>it=ROOT_ID.equals(parent)?roots():items(stationsFor(parent));return Futures.immediateFuture(LibraryResult.ofItemList(page(it,pg,size),p));}
-        @Override public ListenableFuture<LibraryResult<MediaItem>> onGetItem(MediaLibrarySession s,MediaSession.ControllerInfo b,String id){if(ROOT_ID.equals(id))return Futures.immediateFuture(LibraryResult.ofItem(node(ROOT_ID,"Radio Maroc"),null));if(ALL_ID.equals(id)||FAVORITES_ID.equals(id)||RECENT_ID.equals(id)||id.startsWith(CAT_PREFIX))return Futures.immediateFuture(LibraryResult.ofItem(node(id,id.startsWith(CAT_PREFIX)?id.substring(CAT_PREFIX.length()):id),null));Station st=StationRepository.find(id);return st!=null?Futures.immediateFuture(LibraryResult.ofItem(catalog(st),null)):Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE));}
-        @Override public ListenableFuture<List<MediaItem>> onAddMediaItems(MediaSession ms,MediaSession.ControllerInfo c,List<MediaItem> requested){List<MediaItem>r=new ArrayList<>();for(MediaItem x:requested){Station st=StationRepository.find(x.mediaId);r.add(st!=null?catalog(st):x);}return Futures.immediateFuture(r);}
-        @Override public ListenableFuture<LibraryResult<Void>> onSearch(MediaLibrarySession s,MediaSession.ControllerInfo b,String q,LibraryParams p){s.notifySearchResultChanged(b,q,StationRepository.search(q).size(),p);return Futures.immediateFuture(LibraryResult.ofVoid(p));}
-        @Override public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetSearchResult(MediaLibrarySession s,MediaSession.ControllerInfo b,String q,int pg,int size,LibraryParams p){return Futures.immediateFuture(LibraryResult.ofItemList(page(items(StationRepository.search(q)),pg,size),p));}
+    private void playStation(Station station) {
+        currentStationId = station.id;
+        candidates = buildCandidates(station);
+        candidateIndex = 0;
+        dynamicMetadata = "";
+        playCurrent(station);
     }
 
-    @Override public void onDestroy(){if(sleepRunnable!=null)handler.removeCallbacks(sleepRunnable);if(session!=null){session.release();session=null;}if(player!=null){player.release();player=null;}super.onDestroy();}
+    private void playCurrent(Station station) {
+        if (candidates.isEmpty()) return;
+        String url = candidates.get(Math.max(0, Math.min(candidateIndex, candidates.size() - 1)));
+        player.setMediaItem(playable(station, url));
+        player.prepare();
+        player.play();
+        prefs.setLastStationId(station.id);
+        prefs.addHistory(station.id);
+        broadcastState("Connessione…");
+    }
+
+    private boolean tryNextCandidate() {
+        Station station = StationRepository.find(currentStationId);
+        if (station == null) return false;
+        if (candidates.isEmpty()) candidates = buildCandidates(station);
+        if (candidateIndex + 1 >= candidates.size()) return false;
+        candidateIndex++;
+        playCurrent(station);
+        return true;
+    }
+
+    private List<String> buildCandidates(Station station) {
+        List<String> urls = new ArrayList<>();
+        if (prefs.isDataSaver()) addUnique(urls, station.lowDataUrl);
+        addUnique(urls, station.primaryUrl);
+        addUnique(urls, station.backupUrl);
+        return urls;
+    }
+
+    private static void addUnique(List<String> list, String value) {
+        if (value != null && !value.isEmpty() && !list.contains(value)) list.add(value);
+    }
+
+    private void playRelative(int direction) {
+        List<Station> all = StationRepository.all();
+        if (all.isEmpty()) return;
+        int index = StationRepository.indexOf(currentStationId);
+        if (index < 0) index = StationRepository.indexOf(prefs.lastStationId());
+        if (index < 0) index = 0;
+        playStation(all.get((index + direction + all.size()) % all.size()));
+    }
+
+    private void setSleepTimer(int minutes) {
+        if (sleepRunnable != null) handler.removeCallbacks(sleepRunnable);
+        sleepRunnable = null;
+        sleepDeadline = 0;
+        if (minutes > 0) {
+            sleepDeadline = System.currentTimeMillis() + minutes * 60000L;
+            sleepRunnable = () -> {
+                player.pause();
+                sleepDeadline = 0;
+                broadcastState("Sleep timer terminato");
+            };
+            handler.postDelayed(sleepRunnable, minutes * 60000L);
+        }
+        broadcastState(player.isPlaying() ? "LIVE" : "In pausa");
+    }
+
+    private void broadcastState(String state) {
+        Intent intent = new Intent(ACTION_STATE);
+        intent.setPackage(getPackageName());
+        intent.putExtra(EXTRA_STATION_ID, currentStationId == null ? prefs.lastStationId() : currentStationId);
+        intent.putExtra(EXTRA_STATE, state);
+        intent.putExtra(EXTRA_METADATA, dynamicMetadata == null ? "" : dynamicMetadata);
+        intent.putExtra(EXTRA_SLEEP_DEADLINE, sleepDeadline);
+        sendBroadcast(intent);
+    }
+
+    private MediaItem playable(Station station, String url) {
+        MediaMetadata metadata = new MediaMetadata.Builder()
+                .setTitle(station.name)
+                .setArtist(station.subtitle())
+                .setAlbumTitle(station.category)
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .build();
+        return new MediaItem.Builder()
+                .setMediaId(station.id)
+                .setUri(url)
+                .setMediaMetadata(metadata)
+                .build();
+    }
+
+    private MediaItem catalog(Station station) {
+        List<String> urls = buildCandidates(station);
+        return playable(station, urls.isEmpty() ? station.primaryUrl : urls.get(0));
+    }
+
+    private MediaItem node(String id, String title) {
+        MediaMetadata metadata = new MediaMetadata.Builder()
+                .setTitle(title)
+                .setIsBrowsable(true)
+                .setIsPlayable(false)
+                .build();
+        return new MediaItem.Builder().setMediaId(id).setMediaMetadata(metadata).build();
+    }
+
+    /** Android Auto works best with four or fewer browsable root children. */
+    private List<MediaItem> carRootItems() {
+        List<MediaItem> items = new ArrayList<>();
+        items.add(node(FAVORITES_ID, "Preferiti"));
+        items.add(node(RECENT_ID, "Recenti"));
+        items.add(node(POPULAR_ID, "Popolari"));
+        items.add(node(CATEGORIES_ID, "Categorie"));
+        return items;
+    }
+
+    private List<MediaItem> categoryItems() {
+        List<MediaItem> items = new ArrayList<>();
+        items.add(node(ALL_ID, "Tutte le radio"));
+        items.add(node(CAT_PREFIX + StationRepository.CAT_MUSIC, "Musica"));
+        items.add(node(CAT_PREFIX + StationRepository.CAT_NEWS, "News"));
+        items.add(node(CAT_PREFIX + StationRepository.CAT_SPORT, "Sport"));
+        items.add(node(CAT_PREFIX + StationRepository.CAT_RELIGIOUS, "Religiosa"));
+        items.add(node(CAT_PREFIX + StationRepository.CAT_AMAZIGH, "Amazigh"));
+        items.add(node(CAT_PREFIX + StationRepository.CAT_REGIONAL, "Regionali"));
+        items.add(node(CAT_PREFIX + StationRepository.CAT_GENERAL, "Generaliste"));
+        return items;
+    }
+
+    private List<Station> popularStations() {
+        List<Station> all = StationRepository.all();
+        return new ArrayList<>(all.subList(0, Math.min(8, all.size())));
+    }
+
+    private List<Station> stationsFor(String parentId) {
+        if (ALL_ID.equals(parentId)) return StationRepository.all();
+        if (POPULAR_ID.equals(parentId)) return popularStations();
+
+        List<Station> result = new ArrayList<>();
+        if (FAVORITES_ID.equals(parentId)) {
+            for (Station station : StationRepository.all()) {
+                if (prefs.isFavorite(station.id)) result.add(station);
+            }
+            return result;
+        }
+        if (RECENT_ID.equals(parentId)) {
+            for (String id : prefs.historyIds()) {
+                Station station = StationRepository.find(id);
+                if (station != null) result.add(station);
+            }
+            return result;
+        }
+        if (parentId != null && parentId.startsWith(CAT_PREFIX)) {
+            return StationRepository.byCategory(parentId.substring(CAT_PREFIX.length()));
+        }
+        return result;
+    }
+
+    private List<MediaItem> items(List<Station> stations) {
+        List<MediaItem> result = new ArrayList<>();
+        for (Station station : stations) result.add(catalog(station));
+        return result;
+    }
+
+    private static List<MediaItem> page(List<MediaItem> source, int page, int size) {
+        int from = Math.min(source.size(), Math.max(0, page * size));
+        int to = Math.min(source.size(), from + size);
+        return new ArrayList<>(source.subList(from, to));
+    }
+
+    private LibraryParams resultParams(LibraryParams requested) {
+        Bundle extras = new Bundle();
+        extras.putInt(
+                MediaConstants.EXTRAS_KEY_CONTENT_STYLE_BROWSABLE,
+                MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_CATEGORY_LIST_ITEM);
+        extras.putInt(
+                MediaConstants.EXTRAS_KEY_CONTENT_STYLE_PLAYABLE,
+                MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_LIST_ITEM);
+        LibraryParams.Builder builder = new LibraryParams.Builder().setExtras(extras);
+        if (requested != null) {
+            builder.setRecent(requested.isRecent);
+            builder.setSuggested(requested.isSuggested);
+            builder.setOffline(requested.isOffline);
+        }
+        return builder.build();
+    }
+
+    private final class LibraryCallback implements MediaLibrarySession.Callback {
+        @Override
+        public ListenableFuture<LibraryResult<MediaItem>> onGetLibraryRoot(
+                MediaLibrarySession mediaSession,
+                MediaSession.ControllerInfo browser,
+                LibraryParams params) {
+            String id = ROOT_ID;
+            String title = "Radio Maroc";
+            if (params != null && params.isRecent) {
+                id = RECENT_ID;
+                title = "Recenti";
+            } else if (params != null && params.isSuggested) {
+                id = POPULAR_ID;
+                title = "Popolari";
+            }
+            return Futures.immediateFuture(LibraryResult.ofItem(node(id, title), resultParams(params)));
+        }
+
+        @Override
+        public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetChildren(
+                MediaLibrarySession mediaSession,
+                MediaSession.ControllerInfo browser,
+                String parentId,
+                int page,
+                int pageSize,
+                LibraryParams params) {
+            List<MediaItem> result;
+            if (ROOT_ID.equals(parentId)) result = carRootItems();
+            else if (CATEGORIES_ID.equals(parentId)) result = categoryItems();
+            else result = items(stationsFor(parentId));
+            return Futures.immediateFuture(
+                    LibraryResult.ofItemList(page(result, page, pageSize), resultParams(params)));
+        }
+
+        @Override
+        public ListenableFuture<LibraryResult<MediaItem>> onGetItem(
+                MediaLibrarySession mediaSession,
+                MediaSession.ControllerInfo browser,
+                String id) {
+            if (ROOT_ID.equals(id)) {
+                return Futures.immediateFuture(LibraryResult.ofItem(node(ROOT_ID, "Radio Maroc"), resultParams(null)));
+            }
+            if (FAVORITES_ID.equals(id) || RECENT_ID.equals(id) || POPULAR_ID.equals(id)
+                    || CATEGORIES_ID.equals(id) || ALL_ID.equals(id) || id.startsWith(CAT_PREFIX)) {
+                String title;
+                if (FAVORITES_ID.equals(id)) title = "Preferiti";
+                else if (RECENT_ID.equals(id)) title = "Recenti";
+                else if (POPULAR_ID.equals(id)) title = "Popolari";
+                else if (CATEGORIES_ID.equals(id)) title = "Categorie";
+                else if (ALL_ID.equals(id)) title = "Tutte le radio";
+                else title = id.substring(CAT_PREFIX.length());
+                return Futures.immediateFuture(LibraryResult.ofItem(node(id, title), resultParams(null)));
+            }
+            Station station = StationRepository.find(id);
+            return station != null
+                    ? Futures.immediateFuture(LibraryResult.ofItem(catalog(station), resultParams(null)))
+                    : Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE));
+        }
+
+        @Override
+        public ListenableFuture<List<MediaItem>> onAddMediaItems(
+                MediaSession mediaSession,
+                MediaSession.ControllerInfo controller,
+                List<MediaItem> requested) {
+            List<MediaItem> result = new ArrayList<>();
+            for (MediaItem item : requested) {
+                Station station = StationRepository.find(item.mediaId);
+                result.add(station != null ? catalog(station) : item);
+            }
+            return Futures.immediateFuture(result);
+        }
+
+        @Override
+        public ListenableFuture<LibraryResult<Void>> onSearch(
+                MediaLibrarySession mediaSession,
+                MediaSession.ControllerInfo browser,
+                String query,
+                LibraryParams params) {
+            mediaSession.notifySearchResultChanged(browser, query, StationRepository.search(query).size(), resultParams(params));
+            return Futures.immediateFuture(LibraryResult.ofVoid(resultParams(params)));
+        }
+
+        @Override
+        public ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> onGetSearchResult(
+                MediaLibrarySession mediaSession,
+                MediaSession.ControllerInfo browser,
+                String query,
+                int page,
+                int pageSize,
+                LibraryParams params) {
+            return Futures.immediateFuture(
+                    LibraryResult.ofItemList(
+                            page(items(StationRepository.search(query)), page, pageSize),
+                            resultParams(params)));
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        if (sleepRunnable != null) handler.removeCallbacks(sleepRunnable);
+        if (session != null) {
+            session.release();
+            session = null;
+        }
+        if (player != null) {
+            player.release();
+            player = null;
+        }
+        super.onDestroy();
+    }
 }
