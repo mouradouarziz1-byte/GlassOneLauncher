@@ -1,8 +1,8 @@
-name: Build Radio Maroc Android Auto APK
+name: Build Radio Maroc Android Auto v2.2 APK
 
 on:
   push:
-    branches: [ "radio-maroc-android-auto" ]
+    branches: [ "radio-maroc-android-auto-v2.2" ]
     paths:
       - "RadioMarocApp/**"
       - ".github/workflows/radio-maroc-build.yml"
@@ -31,11 +31,11 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Rename APK
-        run: cp RadioMarocApp/app/build/outputs/apk/debug/app-debug.apk RadioMaroc-AndroidAuto-v2.1.apk
+        run: cp RadioMarocApp/app/build/outputs/apk/debug/app-debug.apk RadioMaroc-AndroidAuto-v2.2.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RadioMaroc-AndroidAuto-APK
-          path: RadioMaroc-AndroidAuto-v2.1.apk
+          name: RadioMaroc-AndroidAuto-v2.2-APK
+          path: RadioMaroc-AndroidAuto-v2.2.apk
           if-no-files-found: error
