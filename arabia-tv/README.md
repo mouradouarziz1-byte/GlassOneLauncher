@@ -1,7 +1,7 @@
 # Arabia TV
 
-Native Android app: editorial directory of 64 channels across 22 Arab League countries and international broadcasters; Arabic/Italian interface, native HLS player, favorites, history and local M3U import.
+Native Android app: 64 curated channel entries across 22 Arab League countries and international broadcasters; Arabic/Italian UI, HLS player, favorites, history and local M3U import.
 
-Source: `ArabiaTV-Android-sorgenti.zip`. SHA-256: 5dfc4f77fdf98a65b36adaa2a2d588b910ce13894592788093062ba590fca60f.
+Source: `ArabiaTV-Android-sorgenti.zip`. SHA-256: 250acb599c02e16fc92aefa185ee3842853089bc55c3f7f7b4eea14332fdda27.
 
-The dedicated workflow builds a signed debug APK, checks public live streams, runs unit tests and Android Lint, then tests the UI on an emulator. Refer to the actual workflow result. Channels without a reachable public stream open their official broadcaster. This selected directory does not contain every existing channel and does not bypass broadcaster access or territory restrictions.
+The dedicated workflow checks public live streams, builds a signed debug APK, runs Python/JUnit tests and Android Lint, and runs interface and live playback checks on Android emulator. Refer to the workflow for actual results. Channels without a public reachable stream open their official broadcaster. This selected directory does not contain every existing channel and does not bypass broadcaster access or territory restrictions.

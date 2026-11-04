@@ -21,7 +21,7 @@ jobs:
 
       - name: Verify and unpack Arabia TV
         run: |
-          echo '5dfc4f77fdf98a65b36adaa2a2d588b910ce13894592788093062ba590fca60f  arabia-tv/ArabiaTV-Android-sorgenti.zip' | sha256sum -c -
+          echo '250acb599c02e16fc92aefa185ee3842853089bc55c3f7f7b4eea14332fdda27  arabia-tv/ArabiaTV-Android-sorgenti.zip' | sha256sum -c -
           unzip -t arabia-tv/ArabiaTV-Android-sorgenti.zip
           unzip -q arabia-tv/ArabiaTV-Android-sorgenti.zip -d buildsrc
 
@@ -46,6 +46,7 @@ jobs:
       - name: Check public live streams and catalog
         working-directory: buildsrc/ArabiaTV
         run: |
+          python3 -m unittest discover -s tools -p "test_*.py" -v
           python3 tools/verify_streams.py
           python3 tools/validate_catalog.py
 
@@ -87,8 +88,10 @@ jobs:
           disable-animations: true
           script: |
             gradle -p buildsrc/ArabiaTV --no-daemon :app:connectedDebugAndroidTest --stacktrace
+            adb install -r out/ArabiaTV-1.0.0.apk
             adb shell am force-stop it.mourad.arabiatv
-            adb shell am start -n it.mourad.arabiatv/.MainActivity
+            adb shell am start -W -n it.mourad.arabiatv/.MainActivity
+            adb shell dumpsys activity activities | grep -E "mResumedActivity.*it.mourad.arabiatv"
             sleep 3
             adb shell screencap -p /sdcard/arabia-tv.png
             adb pull /sdcard/arabia-tv.png out/ArabiaTV-screen.png
