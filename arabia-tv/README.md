@@ -1,7 +1,9 @@
 # Arabia TV + Radio 1.1.0
 
-Integrates the original Radio Maroc Android Auto v2.2 sources (22 stations, background MediaLibraryService, favorites, recent stations, sleep timer, alarms and car browsing) with Arabia TV. Adds a LAN-only UPnP AVTransport/DLNA controller and Android screen cast/Smart View guidance. Actual Samsung hardware compatibility depends on the model, codecs and network; mock protocol tests do not establish physical TV compatibility.
+Integrates the original Radio Maroc Android Auto v2.2 sources: 22 stations, background playback, radio favorites/history, categories, sleep timer, alarms and Android Auto browsing. The Radio entry is on the TV home screen.
 
-New applicationId: it.mourad.arabiatvradio, installable beside previous apps; private data is not migrated automatically.
+Samsung options: LAN-only UPnP AVTransport/DLNA discovery and playback controls, plus Android screen-cast settings and Galaxy Smart View guidance. Compatibility depends on the TV model, codecs and network; physical Samsung TV testing remains required. Radio timers control the local player, not playback on the television.
 
-Source archive SHA-256: 731700efa6ca39ddd52c647f49159b306621b0ab6c755a88ded06e07e277fb80. GitHub workflow builds, signs, lints, tests SOAP against a mock renderer and exercises radio/cast entry points plus live TV playback on Android emulator.
+The applicationId is it.mourad.arabiatvradio. It installs alongside previous apps and does not migrate their private favorites/preferences automatically. The original radio UI remains Italian; the TV UI supports Italian/Arabic.
+
+Source archive SHA-256: 2eebc439fffa8aac84063351e300f1471229a90854cb11fac5e49d5d364f9917. See INTEGRAZIONE-RADIO-TV.md inside the archive for setup, permissions, limitations and provenance. GitHub Actions builds the APK, runs lint, parser/protocol unit tests, mock TV SOAP tests, radio/cast UI tests and live TV playback on emulator. Consult the actual run for results. No physical-TV compatibility claim is made by those tests.
