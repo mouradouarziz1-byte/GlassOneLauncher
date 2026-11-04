@@ -1,9 +1,7 @@
 # Arabia TV + Radio 1.1.0
 
-Integrates the original Radio Maroc Android Auto v2.2 sources: 22 stations, background playback, radio favorites/history, categories, sleep timer, alarms and Android Auto browsing. The Radio entry is on the TV home screen.
+Integrates the original Radio Maroc Android Auto v2.2 sources (22 stations, background playback, favorites/history, sleep timer, alarms, car media browsing) with Arabia TV. Adds Android media search entry, Samsung-compatible LAN UPnP AVTransport/DLNA discovery/controls and Android cast settings/Smart View guidance.
 
-Samsung options: LAN-only UPnP AVTransport/DLNA discovery and playback controls, plus Android screen-cast settings and Galaxy Smart View guidance. Compatibility depends on the TV model, codecs and network; physical Samsung TV testing remains required. Radio timers control the local player, not playback on the television.
+New applicationId: it.mourad.arabiatvradio. Installs beside the old apps; their private data is not migrated automatically. Radio timers control the local player, not the TV. Physical Samsung model and codec compatibility must be checked on the user's television; mock protocol tests are not hardware tests.
 
-The applicationId is it.mourad.arabiatvradio. It installs alongside previous apps and does not migrate their private favorites/preferences automatically. The original radio UI remains Italian; the TV UI supports Italian/Arabic.
-
-Source archive SHA-256: 2eebc439fffa8aac84063351e300f1471229a90854cb11fac5e49d5d364f9917. See INTEGRAZIONE-RADIO-TV.md inside the archive for setup, permissions, limitations and provenance. GitHub Actions builds the APK, runs lint, parser/protocol unit tests, mock TV SOAP tests, radio/cast UI tests and live TV playback on emulator. Consult the actual run for results. No physical-TV compatibility claim is made by those tests.
+Source SHA-256: f63e1b449c88de1b260911e85bddcc7e01e00868ce26a3ba5c34b82b41b0f991. See INTEGRAZIONE-RADIO-TV.md in the source archive. The dedicated workflow builds, signs, lints and runs parser/catalog/protocol tests plus radio/cast UI and live playback tests on emulator. Refer to actual run results.
