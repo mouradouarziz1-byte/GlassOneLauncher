@@ -21,7 +21,7 @@ jobs:
 
       - name: Verify and unpack Arabia TV
         run: |
-          echo 'f63e1b449c88de1b260911e85bddcc7e01e00868ce26a3ba5c34b82b41b0f991  arabia-tv/ArabiaTV-Android-sorgenti.zip' | sha256sum -c -
+          echo '5adaca5928f156399837a1133acb439700994ea9a6729aec477dbc04bc52280e  arabia-tv/ArabiaTV-Android-sorgenti.zip' | sha256sum -c -
           unzip -t arabia-tv/ArabiaTV-Android-sorgenti.zip
           unzip -q arabia-tv/ArabiaTV-Android-sorgenti.zip -d buildsrc
 
