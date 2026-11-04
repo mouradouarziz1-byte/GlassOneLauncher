@@ -1,4 +1,4 @@
-name: Build Arabia TV APK
+name: Build Arabia TV Radio Samsung APK
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
 
       - name: Verify and unpack Arabia TV
         run: |
-          echo '250acb599c02e16fc92aefa185ee3842853089bc55c3f7f7b4eea14332fdda27  arabia-tv/ArabiaTV-Android-sorgenti.zip' | sha256sum -c -
+          echo '731700efa6ca39ddd52c647f49159b306621b0ab6c755a88ded06e07e277fb80  arabia-tv/ArabiaTV-Android-sorgenti.zip' | sha256sum -c -
           unzip -t arabia-tv/ArabiaTV-Android-sorgenti.zip
           unzip -q arabia-tv/ArabiaTV-Android-sorgenti.zip -d buildsrc
 
@@ -31,17 +31,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Gradle 8.9
+      - name: Gradle 9.6.0
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '9.6.0'
 
-      - name: Install Android SDK 35
+      - name: Install Android SDK 36
         run: |
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Check public live streams and catalog
         working-directory: buildsrc/ArabiaTV
@@ -57,17 +57,18 @@ jobs:
       - name: Verify and collect APK
         run: |
           mkdir -p out
-          cp buildsrc/ArabiaTV/app/build/outputs/apk/debug/app-debug.apk out/ArabiaTV-1.0.0.apk
+          cp buildsrc/ArabiaTV/app/build/outputs/apk/debug/app-debug.apk out/ArabiaTV-Radio-1.1.0.apk
           cp buildsrc/ArabiaTV/stream-report.json out/stream-report.json
+          cp buildsrc/ArabiaTV/INTEGRAZIONE-RADIO-TV.md out/LEGGIMI-RADIO-TV.md
           cp buildsrc/ArabiaTV/app/src/main/assets/channels.json out/channels-in-apk.json
-          unzip -t out/ArabiaTV-1.0.0.apk
-          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose out/ArabiaTV-1.0.0.apk
-          sha256sum out/ArabiaTV-1.0.0.apk > out/SHA256SUMS.txt
+          unzip -t out/ArabiaTV-Radio-1.1.0.apk
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose out/ArabiaTV-Radio-1.1.0.apk
+          sha256sum out/ArabiaTV-Radio-1.1.0.apk > out/SHA256SUMS.txt
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: ArabiaTV-1.0.0-apk
+          name: ArabiaTV-Radio-1.1.0-apk
           path: out/
           if-no-files-found: error
           retention-days: 14
@@ -88,9 +89,9 @@ jobs:
           disable-animations: true
           script: |
             gradle -p buildsrc/ArabiaTV --no-daemon :app:connectedDebugAndroidTest --stacktrace
-            adb install -r out/ArabiaTV-1.0.0.apk
-            adb shell am force-stop it.mourad.arabiatv
-            adb shell am start -W -n it.mourad.arabiatv/.MainActivity
+            adb install -r out/ArabiaTV-Radio-1.1.0.apk
+            adb shell am force-stop it.mourad.arabiatvradio
+            adb shell am start -W -n it.mourad.arabiatvradio/it.mourad.arabiatv.MainActivity
             adb shell dumpsys activity activities | grep -E "mResumedActivity.*it.mourad.arabiatv"
             sleep 3
             adb shell screencap -p /sdcard/arabia-tv.png
